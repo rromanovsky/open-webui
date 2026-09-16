@@ -75,6 +75,8 @@
 	import InputMenu from './MessageInput/InputMenu.svelte';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
+	import ThinkingSelector from './MessageInput/ThinkingSelector.svelte';
+	import { compactThinkingModelLabel, type ThinkingLevel } from '$lib/utils/thinking';
 
 	import ToolServersModal from './ToolServersModal.svelte';
 	import SkillsModal from './SkillsModal.svelte';
@@ -144,9 +146,13 @@
 
 	export let atSelectedModel: Model | undefined = undefined;
 	export let selectedModels: [''];
+	export let thinkingLevel: ThinkingLevel = 'auto';
+	export let onThinkingChange: (level: ThinkingLevel) => void = () => {};
 
 	let selectedModelIds = [];
 	$: selectedModelIds = atSelectedModel !== undefined ? [atSelectedModel.id] : selectedModels;
+	$: thinkingModel = $models.find((model) => model.id === selectedModelIds?.[0]);
+	$: thinkingModelLabel = compactThinkingModelLabel(thinkingModel);
 	$: hasChatVariables = selectedModelIds.some(
 		(modelId) =>
 			($models.find((model) => model.id === modelId)?.info?.meta?.chat_variables_schema?.fields
@@ -2530,6 +2536,12 @@
 											triggerClassName="items-center gap-1.5 rounded-lg pl-2 pr-1.5 py-1 text-[0.8125rem] font-normal text-gray-600 transition-colors duration-100 hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
 										/>
 									</div>
+									<ThinkingSelector
+										value={thinkingLevel}
+										modelLabel={thinkingModelLabel}
+										disabled={!selectedModelIds?.[0]}
+										onChange={onThinkingChange}
+									/>
 
 									{#if hasChatVariables}
 										<Tooltip content={$i18n.t('Chat Variables')} placement="top">

@@ -25,6 +25,7 @@
 	import MessageInput from './MessageInput.svelte';
 	import FolderPlaceholder from './Placeholder/FolderPlaceholder.svelte';
 	import FolderTitle from './Placeholder/FolderTitle.svelte';
+	import type { ThinkingLevel } from '$lib/utils/thinking';
 
 	const i18n = getContext('i18n');
 
@@ -35,6 +36,8 @@
 
 	export let atSelectedModel: Model | undefined;
 	export let selectedModels: [''];
+	export let thinkingLevel: ThinkingLevel = 'auto';
+	export let onThinkingChange: (level: ThinkingLevel) => void = () => {};
 
 	export let history;
 
@@ -232,6 +235,8 @@
 						bind:this={messageInput}
 						{history}
 						bind:selectedModels
+						{thinkingLevel}
+						{onThinkingChange}
 						bind:files
 						bind:prompt
 						bind:autoScroll

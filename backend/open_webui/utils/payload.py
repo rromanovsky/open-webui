@@ -82,6 +82,33 @@ def apply_model_params_to_body(params: dict, form_data: dict, mappings: dict[str
     return form_data
 
 
+THINKING_LEVELS = {'auto', 'none', 'low', 'medium', 'high'}
+
+
+def apply_thinking_param(params: dict, owned_by: str | None = None) -> dict:
+    """Map abstract UI `thinking` onto provider-specific request fields."""
+    if not params:
+        return params
+
+    params.pop('thinking_by_model', None)
+    thinking = params.pop('thinking', None)
+    if thinking is None or thinking == '':
+        return params
+
+    level = str(thinking).strip().lower()
+    if level == 'auto' or level not in THINKING_LEVELS:
+        return params
+
+    if owned_by == 'ollama':
+        params.pop('reasoning_effort', None)
+        params['think'] = False if level == 'none' else level
+    else:
+        params.pop('think', None)
+        params['reasoning_effort'] = level
+
+    return params
+
+
 def apply_params_to_form_data(form_data: dict, model: dict, params: dict | None = None) -> dict:
     payload_params = form_data.pop('params', {}) or {}
     params = payload_params if params is None else dict(params)
@@ -96,6 +123,7 @@ def apply_params_to_form_data(form_data: dict, model: dict, params: dict | None 
         'system': str,
         'note_id': str,
         'tool_approval_mode': str,
+        'thinking_by_model': dict,
     }
 
     for key in list(params.keys()):
@@ -111,6 +139,8 @@ def apply_params_to_form_data(form_data: dict, model: dict, params: dict | None 
                     pass
 
         params = deep_update(params, custom_params)
+
+    params = apply_thinking_param(params, model.get('owned_by'))
 
     if model.get('owned_by') == 'ollama':
         form_data['options'] = {**params, **(form_data.get('options') or {})}
@@ -151,6 +181,7 @@ def remove_open_webui_params(params: dict) -> dict:
         'system': str,
         'note_id': str,
         'tool_approval_mode': str,
+        'thinking_by_model': dict,
     }
 
     for key in list(params.keys()):
@@ -178,6 +209,8 @@ def apply_model_params_to_body_openai(params: dict, form_data: dict) -> dict:
 
         # If there are custom parameters, we need to apply them first
         params = deep_update(params, custom_params)
+
+    params = apply_thinking_param(params, 'openai')
 
     mappings = {
         'temperature': float,
@@ -212,6 +245,8 @@ def apply_model_params_to_body_ollama(params: dict, form_data: dict) -> dict:
 
         # If there are custom parameters, we need to apply them first
         params = deep_update(params, custom_params)
+
+    params = apply_thinking_param(params, 'ollama')
 
     # Convert OpenAI parameter names to Ollama parameter names if needed.
     name_differences = {
