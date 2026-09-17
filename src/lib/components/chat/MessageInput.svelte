@@ -2526,17 +2526,18 @@
 								</div>
 
 								<div class="self-end flex space-x-1 mr-1 min-w-0 gap-[0.03125rem]">
+									{#if !history?.currentId}
 									<div class="flex min-w-0 max-w-[10rem] items-center sm:max-w-[13rem]">
 										<ModelSelector
 											bind:this={modelSelector}
 											bind:selectedModels
-											disabled={!!history?.currentId}
-											showSetDefault={!history?.currentId}
+											showSetDefault={true}
 											placement="auto"
 											align="end"
-											triggerClassName="items-center gap-1.5 rounded-lg pl-2 pr-1.5 py-1 text-[0.8125rem] font-normal text-gray-600 transition-colors duration-100 hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/40 dark:hover:text-gray-200 disabled:cursor-default disabled:opacity-80 disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+											triggerClassName="items-center gap-1.5 rounded-lg pl-2 pr-1.5 py-1 text-[0.8125rem] font-normal text-gray-600 transition-colors duration-100 hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
 										/>
 									</div>
+									{/if}
 									<ThinkingSelector
 										value={thinkingLevel}
 										modelLabel={thinkingModelLabel}
