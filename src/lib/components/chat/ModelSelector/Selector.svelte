@@ -193,6 +193,7 @@
 	};
 
 	const toggleOpen = async () => {
+		if (disabled) return;
 		show = !show;
 		if (show) {
 			searchValue = '';
@@ -1011,7 +1012,9 @@
 			}}
 		>
 			<span class="min-w-0 flex-1 truncate">{triggerLabel}</span>
-			<ChevronDown className="ml-1 size-2.5 shrink-0 self-center" strokeWidth="2.5" />
+			{#if !disabled}
+				<ChevronDown className="ml-1 size-2.5 shrink-0 self-center" strokeWidth="2.5" />
+			{/if}
 		</div>
 	</button>
 
