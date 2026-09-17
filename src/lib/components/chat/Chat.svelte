@@ -66,6 +66,12 @@
 	} from '$lib/utils';
 	import { AudioQueue } from '$lib/utils/audio';
 	import { createTemporaryChatId, isTemporaryChatId } from '$lib/utils/chatId';
+	import {
+		buildChatRequestParams,
+		resolveThinkingLevel,
+		setThinkingForModel,
+		type ThinkingLevel
+	} from '$lib/utils/thinking';
 	import { applyResponseStreamEvent, getOutputText } from './Messages/structuredOutput';
 
 	import {
@@ -419,6 +425,32 @@
 		(params?.tool_approval_mode ?? $settings?.params?.tool_approval_mode) === 'ask'
 			? 'ask'
 			: 'full';
+
+	$: thinkingModelId = selectedModelIds?.[0] || selectedModels?.[0] || '';
+	$: thinkingLevel = resolveThinkingLevel(
+		thinkingModelId,
+		params,
+		$settings?.thinking_by_model
+	);
+
+	const handleThinkingChange = async (level: ThinkingLevel) => {
+		if (!thinkingModelId) {
+			return;
+		}
+
+		params = {
+			...params,
+			thinking_by_model: setThinkingForModel(params?.thinking_by_model, thinkingModelId, level)
+		};
+
+		settings.set({
+			...$settings,
+			thinking_by_model: setThinkingForModel($settings?.thinking_by_model, thinkingModelId, level)
+		});
+		await updateUserSettings(localStorage.token, { ui: $settings }).catch((err) => {
+			console.error('[thinking settings]', err);
+		});
+	};
 
 	const handleToolApprovalModeChange = async (mode: string) => {
 		const tool_approval_mode = mode === 'ask' ? 'ask' : 'full';
@@ -3551,11 +3583,13 @@
 				stream: stream,
 				model: model.id,
 				...(messages.length > 0 ? { messages } : {}),
-				params: {
-					...$settings?.params,
-					...params,
+				params: buildChatRequestParams({
+					modelId: model.id,
+					chatParams: params,
+					settingsParams: $settings?.params,
+					settingsThinkingByModel: $settings?.thinking_by_model,
 					stop: getStopTokens()
-				},
+				}),
 
 				files: (files?.length ?? 0) > 0 ? files : undefined,
 
@@ -4427,6 +4461,8 @@
 										{history}
 										{taskIds}
 										bind:selectedModels
+										{thinkingLevel}
+										onThinkingChange={handleThinkingChange}
 										bind:files
 										bind:prompt
 										bind:autoScroll
@@ -4519,6 +4555,8 @@
 										{history}
 										{taskIds}
 										bind:selectedModels
+										{thinkingLevel}
+										onThinkingChange={handleThinkingChange}
 										bind:files
 										bind:prompt
 										bind:autoScroll
@@ -4578,6 +4616,8 @@
 								<Placeholder
 									{history}
 									bind:selectedModels
+									{thinkingLevel}
+									onThinkingChange={handleThinkingChange}
 									bind:messageInput
 									bind:files
 									bind:prompt

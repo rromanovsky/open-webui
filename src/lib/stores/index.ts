@@ -239,6 +239,7 @@ type Settings = {
 	responseAutoCopy?: any;
 	richTextInput?: boolean;
 	params?: any;
+	thinking_by_model?: Record<string, 'auto' | 'none' | 'low' | 'medium' | 'high'>;
 	userLocation?: any;
 	webSearch?: any;
 	memory?: boolean;
