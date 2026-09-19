@@ -1,4 +1,5 @@
 <script lang="ts">
+	// AECP: product home is /dashboard. Leave this upstream /home layout as a non-product stub.
 	import { onMount, getContext } from 'svelte';
 	import { WEBUI_NAME, showSidebar, functions, mobile } from '$lib/stores';
 	import { page } from '$app/stores';

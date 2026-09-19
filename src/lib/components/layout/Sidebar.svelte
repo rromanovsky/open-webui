@@ -35,6 +35,7 @@
 		setChatActive,
 		setChatReadAt
 	} from '$lib/stores/chatList';
+	import { enterChatSurface, enterDashboardSurface } from '$lib/utils/softHome';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
 	const i18n = getContext('i18n');
@@ -86,6 +87,7 @@
 	import SearchIcon from './Sidebar/icons/Search.svelte';
 	import Sidebar from '../icons/Sidebar.svelte';
 	import WorkspaceIcon from './Sidebar/icons/Workspace.svelte';
+	import DashboardIcon from './Sidebar/icons/Dashboard.svelte';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
 	import Dropdown from '../common/Dropdown.svelte';
 	import DropdownMenu from '../common/DropdownMenu.svelte';
@@ -217,6 +219,8 @@
 	};
 
 	$: activeMenuItemId = getActiveMenuItemId($page.url.pathname);
+	$: isDashboardActive =
+		$page.url.pathname === '/dashboard' || $page.url.pathname.startsWith('/dashboard/');
 
 	const initPinnedMenuSortable = () => {
 		const el = document.getElementById('pinned-menu-items-list');
@@ -810,6 +814,7 @@
 	};
 
 	const newChatHandler = async () => {
+		enterChatSurface();
 		selectedChatId = null;
 		selectedFolder.set(null);
 		closeMobileSidebar();
@@ -828,6 +833,11 @@
 		closeMobileSidebar();
 
 		await tick();
+	};
+
+	const dashboardClickHandler = async () => {
+		enterDashboardSurface();
+		await itemClickHandler();
 	};
 
 	const isWindows = /Windows/i.test(navigator.userAgent);
@@ -979,6 +989,33 @@
 				</div>
 
 				<div class="-gap-0.5">
+					<div class="">
+						<Tooltip content={$i18n.t('Dashboard')} placement="right">
+							<a
+								class=" cursor-pointer flex size-8 items-center justify-center transition group"
+								href="/dashboard"
+								draggable="false"
+								on:click={async (e) => {
+									e.stopImmediatePropagation();
+									e.preventDefault();
+									goto('/dashboard');
+									dashboardClickHandler();
+								}}
+								aria-label={$i18n.t('Dashboard')}
+							>
+								<div
+									class="self-center flex size-[calc(30px*var(--app-text-scale,1))] items-center justify-center rounded-lg transition {isDashboardActive
+										? ($settings?.highContrastMode ?? false)
+											? 'bg-black/[0.035] dark:bg-white/[0.06]'
+											: 'bg-black/[0.035] dark:bg-white/[0.045]'
+										: 'group-hover:bg-gray-100 dark:group-hover:bg-gray-900'}"
+								>
+									<DashboardIcon className="size-4" strokeWidth="1.5" />
+								</div>
+							</a>
+						</Tooltip>
+					</div>
+
 					<div class="">
 						<Tooltip content={$i18n.t('New Chat')} placement="right">
 							<a
@@ -1208,6 +1245,31 @@
 					}}
 				>
 					<div class="pb-1">
+						<div class="px-1 flex justify-center text-gray-700 dark:text-gray-300">
+							<a
+								id="sidebar-dashboard-button"
+								class="group grow flex items-center space-x-2 rounded-xl px-2 py-1.5 transition outline-none {isDashboardActive
+									? ($settings?.highContrastMode ?? false)
+										? 'bg-black/[0.035] dark:bg-white/[0.06]'
+										: 'bg-black/[0.035] dark:bg-white/[0.045]'
+									: 'hover:bg-gray-100 dark:hover:bg-gray-900'}"
+								href="/dashboard"
+								draggable="false"
+								on:click={dashboardClickHandler}
+								aria-label={$i18n.t('Dashboard')}
+							>
+								<div class="self-center flex size-4 shrink-0 items-center justify-center">
+									<DashboardIcon className="size-4" strokeWidth="1.5" />
+								</div>
+
+								<div class="flex flex-1 self-center translate-y-[0.5px]">
+									<div class=" self-center text-[0.8125rem] leading-5">
+										{$i18n.t('Dashboard')}
+									</div>
+								</div>
+							</a>
+						</div>
+
 						<div class="px-1 flex justify-center text-gray-700 dark:text-gray-300">
 							<a
 								id="sidebar-new-chat-button"

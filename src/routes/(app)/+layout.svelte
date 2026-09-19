@@ -50,6 +50,7 @@
 	import UpdateInfoToast from '$lib/components/layout/UpdateInfoToast.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import { loadKeybindings, matchKeybinding, Shortcut } from '$lib/shortcuts';
+	import { enterChatSurface } from '$lib/utils/softHome';
 
 	const i18n = getContext('i18n');
 
@@ -344,6 +345,7 @@
 					} else {
 						temporaryChatEnabled.set(!$temporaryChatEnabled);
 					}
+					enterChatSurface();
 					await goto('/');
 					setTimeout(() => {
 						document.getElementById('new-chat-button')?.click();
