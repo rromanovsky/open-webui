@@ -7,6 +7,7 @@ import {
 	resolveAecpApiBaseUrl,
 	resolveDashboardTaskId,
 	rewriteDockerDesktopHost,
+	resultPath,
 	taskLiveChainPath,
 	withDashboardTaskId
 } from './aecpProjectApi';
@@ -43,6 +44,7 @@ describe('paths and search', () => {
 		expect(dashboardIndexPath()).toBe('/api/v1/dashboard');
 		expect(dashboardIndexPath('proj-1')).toBe('/api/v1/dashboard?projectId=proj-1');
 		expect(taskLiveChainPath('task-1')).toBe('/api/v1/tasks/task-1/live-chain');
+		expect(resultPath('result-1')).toBe('/api/v1/results/result-1');
 		expect(joinAecpApiUrl('http://127.0.0.1:3000', taskLiveChainPath('task-1'))).toBe(
 			'http://127.0.0.1:3000/api/v1/tasks/task-1/live-chain'
 		);

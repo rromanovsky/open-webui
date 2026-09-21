@@ -55,6 +55,10 @@ export function taskLiveChainPath(taskId: string): string {
 	return `/api/v1/tasks/${taskId}/live-chain`;
 }
 
+export function resultPath(resultId: string): string {
+	return `/api/v1/results/${resultId}`;
+}
+
 export function readStoredAecpApiBase(storage?: Storage | null): string | null {
 	try {
 		return storage?.getItem(AECP_API_BASE_STORAGE_KEY) ?? null;

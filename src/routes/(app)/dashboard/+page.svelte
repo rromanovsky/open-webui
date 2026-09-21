@@ -13,9 +13,16 @@
 		readStoredAecpApiBase,
 		resolveAecpApiBaseUrl,
 		resolveDashboardTaskId,
+		resultPath,
 		taskLiveChainPath,
 		withDashboardTaskId
 	} from '$lib/utils/aecpProjectApi';
+	import {
+		formatResultDetails,
+		hasSoftPeek,
+		type FaceConciergePeek,
+		type FaceLiveChainStep
+	} from '$lib/utils/liveChainSoft';
 
 	const i18n = getContext('i18n');
 
@@ -58,23 +65,19 @@
 		} | null;
 	};
 
-	type LiveChainStep = {
-		role: string;
-		state: string;
-		runId: string | null;
-		resultId: string | null;
-		summary: string | null;
-		artifactCount: number;
-		approvalRequestId: string | null;
-		acceptanceDecisionId: string | null;
-		soft: { langfuseTraceId: string | null; detailsRef: string | null };
-	};
+	type LiveChainStep = FaceLiveChainStep;
 
 	type LiveChain = {
 		task: { id: string; key: string; status: string; title: string };
 		workflow: { workflowId: string; status: string | null; peekError: string | null };
 		steps: LiveChainStep[];
+		conciergePeek: FaceConciergePeek;
 	};
+
+	type DetailsState =
+		| { status: 'loading' }
+		| { status: 'ok'; json: unknown }
+		| { status: 'error'; error: string };
 
 	const STEP_LABELS: Record<string, string> = {
 		architect: 'Architect',
@@ -93,6 +96,7 @@
 	let chainError: string | null = null;
 	let chainLoading = false;
 	let openSoftRole: string | null = null;
+	let detailsByRef: Record<string, DetailsState> = {};
 	let lastHealthKey = '';
 	let lastChainKey = '';
 
@@ -168,12 +172,26 @@
 		return STEP_LABELS[role] ?? role;
 	}
 
-	function hasSoftPeek(step: LiveChainStep): boolean {
-		return Boolean(step.soft.langfuseTraceId || step.soft.detailsRef);
+	function toggleSoft(step: LiveChainStep) {
+		const next = openSoftRole === step.role ? null : step.role;
+		openSoftRole = next;
+		if (next && step.soft.detailsRef && apiBase) {
+			void loadResultDetails(apiBase, step.soft.detailsRef);
+		}
 	}
 
-	function toggleSoft(role: string) {
-		openSoftRole = openSoftRole === role ? null : role;
+	async function loadResultDetails(base: string, resultId: string) {
+		const current = detailsByRef[resultId];
+		if (current?.status === 'ok' || current?.status === 'loading') return;
+		detailsByRef = { ...detailsByRef, [resultId]: { status: 'loading' } };
+		const result = await fetchAecpJson<{ details: unknown }>(
+			joinAecpApiUrl(base, resultPath(resultId))
+		);
+		if (!result.ok) {
+			detailsByRef = { ...detailsByRef, [resultId]: { status: 'error', error: result.error } };
+			return;
+		}
+		detailsByRef = { ...detailsByRef, [resultId]: { status: 'ok', json: result.data.details } };
 	}
 
 	onMount(() => {
@@ -323,31 +341,75 @@
 										{step.state.replaceAll('_', ' ')}
 									</p>
 								</div>
-								{#if hasSoftPeek(step)}
-									<button
-										type="button"
-										class="rounded px-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-										aria-expanded={openSoftRole === step.role}
-										aria-label="Soft tails"
-										on:click={() => toggleSoft(step.role)}
-									>
-										…
-									</button>
-								{/if}
+								<button
+									type="button"
+									class="rounded px-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+									aria-expanded={openSoftRole === step.role}
+									aria-label="Soft tails"
+									disabled={!hasSoftPeek(step, chain.conciergePeek)}
+									on:click={() => toggleSoft(step)}
+								>
+									…
+								</button>
 							</div>
 							{#if step.summary}
 								<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{step.summary}</p>
+							{/if}
+							{#if step.errorHint}
+								<p class="mt-1 text-xs text-red-600 dark:text-red-400">{step.errorHint}</p>
 							{/if}
 							<p class="mt-1 text-xs text-gray-400">
 								artifacts {step.artifactCount}
 							</p>
 							{#if openSoftRole === step.role}
 								<div
-									class="mt-2 rounded-lg bg-white/70 p-2 text-xs text-gray-600 dark:bg-black/20 dark:text-gray-300"
+									class="mt-2 space-y-2 rounded-lg bg-white/70 p-2 text-xs text-gray-600 dark:bg-black/20 dark:text-gray-300"
 								>
-									<p>Langfuse: {step.soft.langfuseTraceId ?? 'none'}</p>
-									<p>Details ref: {step.soft.detailsRef ?? 'none'}</p>
-									<p class="mt-1 text-gray-400">Soft peek only — not SoT.</p>
+									{#if step.soft.detailsRef}
+										{@const details = detailsByRef[step.soft.detailsRef]}
+										<section>
+											<p class="font-medium text-gray-700 dark:text-gray-200">Result details</p>
+											{#if details?.status === 'loading'}
+												<p class="mt-1 text-gray-400">Loading Result.details…</p>
+											{:else if details?.status === 'error'}
+												<p class="mt-1 text-gray-400">
+													Details unavailable ({details.error}). Card still works.
+												</p>
+											{:else if details?.status === 'ok'}
+												<pre
+													class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] text-gray-600 dark:text-gray-300">{formatResultDetails(
+														details.json
+													)}</pre>
+											{/if}
+										</section>
+									{/if}
+									{#if step.soft.langfuseTraceUrl}
+										<p>
+											<a
+												class="text-blue-600 underline dark:text-blue-400"
+												href={step.soft.langfuseTraceUrl}
+												target="_blank"
+												rel="noreferrer"
+											>
+												Open Langfuse
+											</a>
+										</p>
+									{:else if step.soft.langfuseTraceId}
+										<p>Langfuse trace {step.soft.langfuseTraceId} (no LANGFUSE_HOST)</p>
+									{/if}
+									{#if chain.conciergePeek}
+										<section>
+											<p class="font-medium text-gray-700 dark:text-gray-200">Concierge peek</p>
+											<p class="mt-0.5">{chain.conciergePeek.responseKind}</p>
+											{#if chain.conciergePeek.recommendationSummary}
+												<p class="mt-0.5">{chain.conciergePeek.recommendationSummary}</p>
+											{/if}
+										</section>
+									{/if}
+									{#if !hasSoftPeek(step, chain.conciergePeek)}
+										<p>No soft tails for this step.</p>
+									{/if}
+									<p class="text-gray-400">Soft peek only — not SoT.</p>
 								</div>
 							{/if}
 						</li>
