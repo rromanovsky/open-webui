@@ -5,8 +5,10 @@ import {
 	joinAecpApiUrl,
 	parseDashboardSearch,
 	resolveAecpApiBaseUrl,
+	resolveDashboardTaskId,
 	rewriteDockerDesktopHost,
-	taskLiveChainPath
+	taskLiveChainPath,
+	withDashboardTaskId
 } from './aecpProjectApi';
 
 describe('rewriteDockerDesktopHost', () => {
@@ -53,5 +55,37 @@ describe('paths and search', () => {
 			apiBase: null
 		});
 		expect(parseDashboardSearch('')).toEqual({ taskId: null, projectId: null, apiBase: null });
+	});
+});
+
+describe('resolveDashboardTaskId', () => {
+	it('uses focusTask when the URL has no taskId', () => {
+		expect(
+			resolveDashboardTaskId({
+				queryTaskId: null,
+				focusTaskId: 'focus-1'
+			})
+		).toBe('focus-1');
+	});
+
+	it('lets explicit ?taskId= win over focusTask', () => {
+		expect(
+			resolveDashboardTaskId({
+				queryTaskId: 'query-1',
+				focusTaskId: 'focus-1'
+			})
+		).toBe('query-1');
+	});
+
+	it('stays empty when neither query nor focusTask is present', () => {
+		expect(resolveDashboardTaskId({ queryTaskId: null, focusTaskId: null })).toBeNull();
+	});
+});
+
+describe('withDashboardTaskId', () => {
+	it('soft-sets taskId without dropping other search keys', () => {
+		expect(withDashboardTaskId('/dashboard?projectId=p1', 'task-9')).toBe(
+			'/dashboard?projectId=p1&taskId=task-9'
+		);
 	});
 });

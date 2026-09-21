@@ -79,6 +79,21 @@ export function parseDashboardSearch(search: string): DashboardSearch {
 	};
 }
 
+/** Explicit `?taskId=` wins; otherwise Project API `focusTask`. */
+export function resolveDashboardTaskId(input: {
+	queryTaskId: string | null;
+	focusTaskId?: string | null;
+}): string | null {
+	return firstNonEmpty(input.queryTaskId, input.focusTaskId);
+}
+
+/** Shareable `?taskId=` without a full navigation. Preserves other query keys. */
+export function withDashboardTaskId(href: string, taskId: string): string {
+	const url = new URL(href, 'http://dashboard.local');
+	url.searchParams.set('taskId', taskId);
+	return `${url.pathname}${url.search}${url.hash}`;
+}
+
 export type AecpFetchResult<T> =
 	| { ok: true; status: number; data: T }
 	| { ok: false; status: number; error: string };

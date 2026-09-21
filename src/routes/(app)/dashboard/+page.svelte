@@ -12,7 +12,9 @@
 		parseDashboardSearch,
 		readStoredAecpApiBase,
 		resolveAecpApiBaseUrl,
-		taskLiveChainPath
+		resolveDashboardTaskId,
+		taskLiveChainPath,
+		withDashboardTaskId
 	} from '$lib/utils/aecpProjectApi';
 
 	const i18n = getContext('i18n');
@@ -37,6 +39,8 @@
 		recentFailures: number;
 	};
 
+	type FocusTask = { id: string; key: string; title: string; status: string; updatedAt: string };
+
 	type DashboardIndex = {
 		overall: LinkStatus;
 		emptyReason: string | null;
@@ -50,6 +54,7 @@
 			recentFailures: unknown[];
 			openWebUi: { reachable: boolean };
 			devContour: { reachable: boolean };
+			focusTask: FocusTask | null;
 		} | null;
 	};
 
@@ -96,10 +101,27 @@
 		queryBase: search.apiBase,
 		storedBase: typeof window === 'undefined' ? null : readStoredAecpApiBase(window.localStorage)
 	});
+	$: resolvedTaskId = resolveDashboardTaskId({
+		queryTaskId: search.taskId,
+		focusTaskId: health?.selected?.focusTask?.id ?? null
+	});
 
 	$: if (typeof window !== 'undefined' && apiBase) {
 		void loadHealth(apiBase, search.projectId);
-		void loadLiveChain(apiBase, search.taskId);
+		if (search.taskId || health !== null || healthError) {
+			void loadLiveChain(apiBase, resolvedTaskId);
+		}
+		if (!search.taskId && resolvedTaskId) {
+			softSetTaskId(resolvedTaskId);
+		}
+	}
+
+	function softSetTaskId(taskId: string) {
+		const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+		const next = withDashboardTaskId(current, taskId);
+		if (next !== current) {
+			window.history.replaceState(window.history.state, '', next);
+		}
 	}
 
 	async function loadHealth(base: string, projectId: string | null) {
@@ -203,8 +225,8 @@
 
 	<div class="flex-1 max-h-full overflow-y-auto px-4 pb-8 pt-2 md:px-6">
 		<p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400">
-			Live Project API projection for Face. PostgreSQL is source of truth. Soft tails stay behind
-			… — not AcceptanceDecision, not Task done, not chat.
+			Live Project API projection for Face. PostgreSQL is source of truth. Soft tails stay behind …
+			— not AcceptanceDecision, not Task done, not chat.
 		</p>
 
 		<section class="mt-5" aria-labelledby="layer-a-heading">
@@ -215,8 +237,8 @@
 				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading project dashboard…</p>
 			{:else if healthError}
 				<p class="mt-2 text-sm text-red-600 dark:text-red-400">
-					Could not load GET /api/v1/dashboard ({healthError}). Check AECP_API_BASE_URL /
-					?apiBase= and CORS.
+					Could not load GET /api/v1/dashboard ({healthError}). Check AECP_API_BASE_URL / ?apiBase=
+					and CORS.
 				</p>
 			{:else if health?.emptyReason}
 				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{health.emptyReason}</p>
@@ -272,13 +294,7 @@
 			<h2 id="layer-b10-heading" class="text-sm font-medium text-gray-800 dark:text-gray-100">
 				Task theater
 			</h2>
-			{#if !search.taskId}
-				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-					Pass <code class="text-xs">?taskId=</code> to load the Architect → Owner-gate strip from
-					<code class="text-xs">GET /api/v1/tasks/:taskId/live-chain</code>. Default focus Task is
-					not chosen yet.
-				</p>
-			{:else if chainLoading}
+			{#if chainLoading || (healthLoading && !search.taskId && !chain)}
 				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading live-chain…</p>
 			{:else if chainError}
 				<p class="mt-2 text-sm text-red-600 dark:text-red-400">{chainError}</p>
@@ -286,6 +302,9 @@
 				<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
 					{chain.task.key} · {chain.task.title} · task {chain.task.status} · workflow
 					{chain.workflow.status ?? 'unknown'}
+					{#if !search.taskId && health?.selected?.focusTask?.id === chain.task.id}
+						· default focus
+					{/if}
 					{#if chain.workflow.peekError}
 						(peek fail-open: {chain.workflow.peekError})
 					{/if}
@@ -323,7 +342,9 @@
 								artifacts {step.artifactCount}
 							</p>
 							{#if openSoftRole === step.role}
-								<div class="mt-2 rounded-lg bg-white/70 p-2 text-xs text-gray-600 dark:bg-black/20 dark:text-gray-300">
+								<div
+									class="mt-2 rounded-lg bg-white/70 p-2 text-xs text-gray-600 dark:bg-black/20 dark:text-gray-300"
+								>
 									<p>Langfuse: {step.soft.langfuseTraceId ?? 'none'}</p>
 									<p>Details ref: {step.soft.detailsRef ?? 'none'}</p>
 									<p class="mt-1 text-gray-400">Soft peek only — not SoT.</p>
@@ -332,6 +353,12 @@
 						</li>
 					{/each}
 				</ol>
+			{:else}
+				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+					No Task to focus. Create one via the Project API, or pass
+					<code class="text-xs">?taskId=</code> to load
+					<code class="text-xs">GET /api/v1/tasks/:taskId/live-chain</code>.
+				</p>
 			{/if}
 		</section>
 	</div>
