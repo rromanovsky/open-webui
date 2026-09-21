@@ -6,16 +6,23 @@
 	import SidebarIcon from '$lib/components/icons/Sidebar.svelte';
 	import { enterDashboardSurface } from '$lib/utils/softHome';
 	import {
+		DASHBOARD_POLL_MS,
 		dashboardIndexPath,
+		dashboardTaskLabel,
 		fetchAecpJson,
+		focusTaskIdToPin,
+		isDashboardTabHidden,
 		joinAecpApiUrl,
 		parseDashboardSearch,
+		projectTasksPath,
 		readStoredAecpApiBase,
+		recentDashboardTasks,
 		resolveAecpApiBaseUrl,
 		resolveDashboardTaskId,
 		resultPath,
 		taskLiveChainPath,
-		withDashboardTaskId
+		withDashboardTaskId,
+		type DashboardTaskOption
 	} from '$lib/utils/aecpProjectApi';
 	import {
 		formatResultDetails,
@@ -95,10 +102,17 @@
 	let chain: LiveChain | null = null;
 	let chainError: string | null = null;
 	let chainLoading = false;
+	let projectTasks: DashboardTaskOption[] = [];
+	let pinnedTaskId: string | null = null;
 	let openSoftRole: string | null = null;
 	let detailsByRef: Record<string, DetailsState> = {};
 	let lastHealthKey = '';
 	let lastChainKey = '';
+	let lastTasksKey = '';
+	let healthRequest = 0;
+	let chainRequest = 0;
+	let tasksRequest = 0;
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 	$: search = parseDashboardSearch($page.url.search);
 	$: apiBase = resolveAecpApiBaseUrl({
@@ -107,16 +121,26 @@
 	});
 	$: resolvedTaskId = resolveDashboardTaskId({
 		queryTaskId: search.taskId,
+		pinnedTaskId,
 		focusTaskId: health?.selected?.focusTask?.id ?? null
 	});
+	$: taskOptions = recentDashboardTasks(projectTasks, { includeId: resolvedTaskId });
 
 	$: if (typeof window !== 'undefined' && apiBase) {
 		void loadHealth(apiBase, search.projectId);
-		if (search.taskId || health !== null || healthError) {
-			void loadLiveChain(apiBase, resolvedTaskId);
+		const projectId = health?.selected?.project.id ?? null;
+		if (projectId) void loadProjectTasks(apiBase, projectId);
+		const pin = focusTaskIdToPin({
+			queryTaskId: search.taskId,
+			pinnedTaskId,
+			focusTaskId: health?.selected?.focusTask?.id ?? null
+		});
+		if (pin) {
+			pinnedTaskId = pin;
+			softSetTaskId(pin);
 		}
-		if (!search.taskId && resolvedTaskId) {
-			softSetTaskId(resolvedTaskId);
+		if (search.taskId || pinnedTaskId || health !== null || healthError) {
+			void loadLiveChain(apiBase, resolvedTaskId);
 		}
 	}
 
@@ -128,27 +152,56 @@
 		}
 	}
 
-	async function loadHealth(base: string, projectId: string | null) {
+	function pickTask(taskId: string) {
+		if (!taskId || taskId === resolvedTaskId) return;
+		pinnedTaskId = taskId;
+		openSoftRole = null;
+		softSetTaskId(taskId);
+	}
+
+	function onTaskSwitcherChange(event: Event) {
+		const target = event.currentTarget;
+		if (!(target instanceof HTMLSelectElement)) return;
+		pickTask(target.value);
+	}
+
+	async function loadHealth(base: string, projectId: string | null, options?: { force?: boolean }) {
 		const key = `${base}|${projectId ?? ''}`;
-		if (key === lastHealthKey) return;
+		if (!options?.force && key === lastHealthKey) return;
 		lastHealthKey = key;
-		healthLoading = true;
-		healthError = null;
+		const request = ++healthRequest;
+		if (!health) healthLoading = true;
 		const result = await fetchAecpJson<DashboardIndex>(
 			joinAecpApiUrl(base, dashboardIndexPath(projectId))
 		);
+		if (request !== healthRequest) return;
 		healthLoading = false;
 		if (!result.ok) {
+			if (health) return;
 			health = null;
 			healthError = result.error;
 			return;
 		}
+		healthError = null;
 		health = result.data;
 	}
 
-	async function loadLiveChain(base: string, taskId: string | null) {
+	async function loadProjectTasks(base: string, projectId: string, options?: { force?: boolean }) {
+		const key = `${base}|${projectId}`;
+		if (!options?.force && key === lastTasksKey) return;
+		lastTasksKey = key;
+		const request = ++tasksRequest;
+		const result = await fetchAecpJson<DashboardTaskOption[]>(
+			joinAecpApiUrl(base, projectTasksPath(projectId))
+		);
+		if (request !== tasksRequest) return;
+		if (!result.ok) return;
+		projectTasks = result.data;
+	}
+
+	async function loadLiveChain(base: string, taskId: string | null, options?: { force?: boolean }) {
 		const key = `${base}|${taskId ?? ''}`;
-		if (key === lastChainKey) return;
+		if (!options?.force && key === lastChainKey) return;
 		lastChainKey = key;
 		if (!taskId) {
 			chain = null;
@@ -156,16 +209,54 @@
 			chainLoading = false;
 			return;
 		}
-		chainLoading = true;
-		chainError = null;
+		const request = ++chainRequest;
+		const switching = chain?.task.id !== taskId;
+		if (switching) chainLoading = true;
 		const result = await fetchAecpJson<LiveChain>(joinAecpApiUrl(base, taskLiveChainPath(taskId)));
+		if (request !== chainRequest) return;
 		chainLoading = false;
 		if (!result.ok) {
+			if (chain?.task.id === taskId) return;
 			chain = null;
 			chainError = result.status === 404 ? 'Task not found' : result.error;
 			return;
 		}
+		chainError = null;
 		chain = result.data;
+	}
+
+	function stopDashboardPoll() {
+		if (pollTimer !== null) {
+			clearInterval(pollTimer);
+			pollTimer = null;
+		}
+	}
+
+	function refreshDashboard() {
+		if (isDashboardTabHidden(document.visibilityState)) {
+			stopDashboardPoll();
+			return;
+		}
+		if (!apiBase) return;
+		void loadHealth(apiBase, search.projectId, { force: true });
+		const projectId = health?.selected?.project.id ?? null;
+		if (projectId) void loadProjectTasks(apiBase, projectId, { force: true });
+		void loadLiveChain(apiBase, resolvedTaskId, { force: true });
+	}
+
+	function startDashboardPoll() {
+		stopDashboardPoll();
+		if (isDashboardTabHidden(document.visibilityState)) return;
+		pollTimer = setInterval(refreshDashboard, DASHBOARD_POLL_MS);
+	}
+
+	function onVisibilityChange() {
+		if (isDashboardTabHidden(document.visibilityState)) {
+			stopDashboardPoll();
+			return;
+		}
+		refreshDashboard();
+		startDashboardPoll();
 	}
 
 	function stepLabel(role: string): string {
@@ -196,6 +287,12 @@
 
 	onMount(() => {
 		enterDashboardSurface();
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		startDashboardPoll();
+		return () => {
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+			stopDashboardPoll();
+		};
 	});
 </script>
 
@@ -312,7 +409,25 @@
 			<h2 id="layer-b10-heading" class="text-sm font-medium text-gray-800 dark:text-gray-100">
 				Task theater
 			</h2>
-			{#if chainLoading || (healthLoading && !search.taskId && !chain)}
+			{#if taskOptions.length > 0}
+				<label
+					class="mt-2 flex max-w-xl flex-col gap-1 text-xs text-gray-500 dark:text-gray-400"
+					for="dashboard-task-switcher"
+				>
+					Task
+					<select
+						id="dashboard-task-switcher"
+						class="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-800 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+						value={resolvedTaskId ?? ''}
+						on:change={onTaskSwitcherChange}
+					>
+						{#each taskOptions as task (task.id)}
+							<option value={task.id}>{dashboardTaskLabel(task)}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+			{#if chainLoading || (healthLoading && !search.taskId && !pinnedTaskId && !chain)}
 				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading live-chain…</p>
 			{:else if chainError}
 				<p class="mt-2 text-sm text-red-600 dark:text-red-400">{chainError}</p>

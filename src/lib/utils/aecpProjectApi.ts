@@ -55,6 +55,20 @@ export function taskLiveChainPath(taskId: string): string {
 	return `/api/v1/tasks/${taskId}/live-chain`;
 }
 
+export function projectTasksPath(projectId: string): string {
+	return `/api/v1/projects/${projectId}/tasks`;
+}
+
+/** Dogfood cadence for layer A + B10. Hidden tabs do not poll. */
+export const DASHBOARD_POLL_MS = 5_000;
+
+/** Switcher window. The focused Task is kept even when it falls outside this cap. */
+export const DASHBOARD_RECENT_TASK_LIMIT = 40;
+
+export function isDashboardTabHidden(visibilityState: string): boolean {
+	return visibilityState === 'hidden';
+}
+
 export function resultPath(resultId: string): string {
 	return `/api/v1/results/${resultId}`;
 }
@@ -83,12 +97,60 @@ export function parseDashboardSearch(search: string): DashboardSearch {
 	};
 }
 
-/** Explicit `?taskId=` wins; otherwise Project API `focusTask`. */
+/**
+ * `pinnedTaskId` wins: `history.replaceState` does not update the SvelteKit page store,
+ * so a switcher pick must override a stale `?taskId=`. Else the URL query, else `focusTask`.
+ */
 export function resolveDashboardTaskId(input: {
 	queryTaskId: string | null;
+	pinnedTaskId?: string | null;
 	focusTaskId?: string | null;
 }): string | null {
-	return firstNonEmpty(input.queryTaskId, input.focusTaskId);
+	return firstNonEmpty(input.pinnedTaskId, input.queryTaskId, input.focusTaskId);
+}
+
+/** Pin the default focus Task once, so a later poll does not retarget the strip. */
+export function focusTaskIdToPin(input: {
+	queryTaskId: string | null;
+	pinnedTaskId: string | null;
+	focusTaskId: string | null;
+}): string | null {
+	if (input.queryTaskId || input.pinnedTaskId) return null;
+	return firstNonEmpty(input.focusTaskId);
+}
+
+export type DashboardTaskOption = {
+	id: string;
+	key: string;
+	title: string;
+	status: string;
+	updatedAt: string;
+};
+
+export function dashboardTaskLabel(
+	task: Pick<DashboardTaskOption, 'key' | 'title' | 'status'>
+): string {
+	return `${task.key} · ${task.title} · ${task.status}`;
+}
+
+/** Newest `updatedAt` first. Stable key order when timestamps tie. */
+export function recentDashboardTasks(
+	tasks: DashboardTaskOption[],
+	options?: { limit?: number; includeId?: string | null }
+): DashboardTaskOption[] {
+	const limit = options?.limit ?? DASHBOARD_RECENT_TASK_LIMIT;
+	const sorted = [...tasks].sort((a, b) => {
+		if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
+		if (a.key !== b.key) return a.key < b.key ? -1 : 1;
+		return 0;
+	});
+	const recent = sorted.slice(0, Math.max(0, limit));
+	const includeId = options?.includeId;
+	if (includeId && !recent.some((task) => task.id === includeId)) {
+		const extra = sorted.find((task) => task.id === includeId);
+		if (extra) recent.push(extra);
+	}
+	return recent;
 }
 
 /** Shareable `?taskId=` without a full navigation. Preserves other query keys. */

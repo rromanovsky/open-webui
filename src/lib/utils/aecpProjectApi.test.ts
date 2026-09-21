@@ -2,14 +2,20 @@ import { describe, expect, it } from 'vitest';
 import {
 	AECP_API_BASE_DEFAULT,
 	dashboardIndexPath,
+	dashboardTaskLabel,
+	focusTaskIdToPin,
+	isDashboardTabHidden,
 	joinAecpApiUrl,
 	parseDashboardSearch,
+	projectTasksPath,
+	recentDashboardTasks,
 	resolveAecpApiBaseUrl,
 	resolveDashboardTaskId,
 	rewriteDockerDesktopHost,
 	resultPath,
 	taskLiveChainPath,
-	withDashboardTaskId
+	withDashboardTaskId,
+	type DashboardTaskOption
 } from './aecpProjectApi';
 
 describe('rewriteDockerDesktopHost', () => {
@@ -44,6 +50,7 @@ describe('paths and search', () => {
 		expect(dashboardIndexPath()).toBe('/api/v1/dashboard');
 		expect(dashboardIndexPath('proj-1')).toBe('/api/v1/dashboard?projectId=proj-1');
 		expect(taskLiveChainPath('task-1')).toBe('/api/v1/tasks/task-1/live-chain');
+		expect(projectTasksPath('proj-1')).toBe('/api/v1/projects/proj-1/tasks');
 		expect(resultPath('result-1')).toBe('/api/v1/results/result-1');
 		expect(joinAecpApiUrl('http://127.0.0.1:3000', taskLiveChainPath('task-1'))).toBe(
 			'http://127.0.0.1:3000/api/v1/tasks/task-1/live-chain'
@@ -81,6 +88,94 @@ describe('resolveDashboardTaskId', () => {
 
 	it('stays empty when neither query nor focusTask is present', () => {
 		expect(resolveDashboardTaskId({ queryTaskId: null, focusTaskId: null })).toBeNull();
+	});
+
+	it('lets a switcher pin override a stale page-store taskId', () => {
+		expect(
+			resolveDashboardTaskId({
+				queryTaskId: 'query-1',
+				pinnedTaskId: 'picked-2',
+				focusTaskId: 'focus-1'
+			})
+		).toBe('picked-2');
+	});
+});
+
+describe('focusTaskIdToPin', () => {
+	it('pins focus once when the URL has no taskId', () => {
+		expect(
+			focusTaskIdToPin({ queryTaskId: null, pinnedTaskId: null, focusTaskId: 'focus-1' })
+		).toBe('focus-1');
+	});
+
+	it('does not retarget when a query or pin is already set', () => {
+		expect(
+			focusTaskIdToPin({ queryTaskId: 'query-1', pinnedTaskId: null, focusTaskId: 'focus-1' })
+		).toBeNull();
+		expect(
+			focusTaskIdToPin({ queryTaskId: null, pinnedTaskId: 'pinned-1', focusTaskId: 'focus-2' })
+		).toBeNull();
+	});
+});
+
+describe('recentDashboardTasks', () => {
+	const tasks: DashboardTaskOption[] = [
+		{
+			id: 'old',
+			key: 'AECP-1',
+			title: 'Old',
+			status: 'done',
+			updatedAt: '2026-09-01T00:00:00.000Z'
+		},
+		{
+			id: 'new',
+			key: 'AECP-3',
+			title: 'New',
+			status: 'ready',
+			updatedAt: '2026-09-20T00:00:00.000Z'
+		},
+		{
+			id: 'mid',
+			key: 'AECP-2',
+			title: 'Mid',
+			status: 'ready',
+			updatedAt: '2026-09-10T00:00:00.000Z'
+		}
+	];
+
+	it('orders by updatedAt descending and caps the window', () => {
+		expect(recentDashboardTasks(tasks, { limit: 2 }).map((task) => task.id)).toEqual([
+			'new',
+			'mid'
+		]);
+	});
+
+	it('keeps the focused Task when it falls outside the cap', () => {
+		expect(
+			recentDashboardTasks(tasks, { limit: 1, includeId: 'old' }).map((task) => task.id)
+		).toEqual(['new', 'old']);
+	});
+
+	it('breaks timestamp ties by key', () => {
+		const tied: DashboardTaskOption[] = [
+			{
+				id: 'b',
+				key: 'AECP-2',
+				title: 'B',
+				status: 'ready',
+				updatedAt: '2026-09-20T00:00:00.000Z'
+			},
+			{ id: 'a', key: 'AECP-1', title: 'A', status: 'ready', updatedAt: '2026-09-20T00:00:00.000Z' }
+		];
+		expect(recentDashboardTasks(tied).map((task) => task.id)).toEqual(['a', 'b']);
+		expect(dashboardTaskLabel(tied[0])).toBe('AECP-2 · B · ready');
+	});
+});
+
+describe('isDashboardTabHidden', () => {
+	it('stops polling only while the tab is hidden', () => {
+		expect(isDashboardTabHidden('hidden')).toBe(true);
+		expect(isDashboardTabHidden('visible')).toBe(false);
 	});
 });
 
