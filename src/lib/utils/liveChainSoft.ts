@@ -25,6 +25,22 @@ export type FaceConciergePeek = {
 	recommendationSummary: string | null;
 } | null;
 
+/** http(s) Temporal UI href only. Anything else (including a gRPC address) is not a link. */
+export function temporalUiHref(uiUrl: string | null | undefined): string | null {
+	if (!uiUrl) {
+		return null;
+	}
+	try {
+		const url = new URL(uiUrl);
+		if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+			return null;
+		}
+		return url.toString();
+	} catch {
+		return null;
+	}
+}
+
 export function hasSoftPeek(
 	step: Pick<FaceLiveChainStep, 'soft'>,
 	conciergePeek: FaceConciergePeek

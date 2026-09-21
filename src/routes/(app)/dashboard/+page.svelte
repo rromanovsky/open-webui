@@ -27,6 +27,7 @@
 	import {
 		formatResultDetails,
 		hasSoftPeek,
+		temporalUiHref,
 		type FaceConciergePeek,
 		type FaceLiveChainStep
 	} from '$lib/utils/liveChainSoft';
@@ -76,7 +77,12 @@
 
 	type LiveChain = {
 		task: { id: string; key: string; status: string; title: string };
-		workflow: { workflowId: string; status: string | null; peekError: string | null };
+		workflow?: {
+			workflowId: string;
+			status: string | null;
+			peekError: string | null;
+			uiUrl?: string | null;
+		};
 		steps: LiveChainStep[];
 		conciergePeek: FaceConciergePeek;
 	};
@@ -113,6 +119,7 @@
 	let chainRequest = 0;
 	let tasksRequest = 0;
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let copiedWorkflowId: string | null = null;
 
 	$: search = parseDashboardSearch($page.url.search);
 	$: apiBase = resolveAecpApiBaseUrl({
@@ -257,6 +264,18 @@
 		}
 		refreshDashboard();
 		startDashboardPoll();
+	}
+
+	async function copyWorkflowId(workflowId: string) {
+		try {
+			if (!navigator.clipboard?.writeText) {
+				return;
+			}
+			await navigator.clipboard.writeText(workflowId);
+			copiedWorkflowId = workflowId;
+		} catch {
+			copiedWorkflowId = null;
+		}
 	}
 
 	function stepLabel(role: string): string {
@@ -432,16 +451,45 @@
 			{:else if chainError}
 				<p class="mt-2 text-sm text-red-600 dark:text-red-400">{chainError}</p>
 			{:else if chain}
-				<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-					{chain.task.key} · {chain.task.title} · task {chain.task.status} · workflow
-					{chain.workflow.status ?? 'unknown'}
+				<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+					{chain.task.key} · {chain.task.title} · task {chain.task.status}
+					{#if chain.workflow}
+						{@const temporalHref = temporalUiHref(chain.workflow.uiUrl)}
+						· workflow
+						<code class="text-[11px]">{chain.workflow.workflowId}</code>
+						· {chain.workflow.status ?? 'unknown'}
+						{#if temporalHref}
+							·
+							<a
+								class="text-blue-600 underline dark:text-blue-400"
+								href={temporalHref}
+								target="_blank"
+								rel="noreferrer"
+								title="Temporal history is not source of truth"
+							>
+								Open Temporal
+							</a>
+						{:else if chain.workflow.workflowId}
+							·
+							<button
+								type="button"
+								class="underline"
+								aria-label="Copy workflow id"
+								on:click={() => chain.workflow && copyWorkflowId(chain.workflow.workflowId)}
+							>
+								{copiedWorkflowId === chain.workflow.workflowId ? 'Copied' : 'Copy id'}
+							</button>
+						{/if}
+						{#if chain.workflow.peekError}
+							(peek fail-open: {chain.workflow.peekError})
+						{/if}
+					{:else}
+						· workflow unavailable
+					{/if}
 					{#if !search.taskId && health?.selected?.focusTask?.id === chain.task.id}
 						· default focus
 					{/if}
-					{#if chain.workflow.peekError}
-						(peek fail-open: {chain.workflow.peekError})
-					{/if}
-				</p>
+				</div>
 				<ol class="mt-3 flex flex-wrap gap-2">
 					{#each chain.steps as step (step.role)}
 						<li
