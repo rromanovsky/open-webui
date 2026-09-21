@@ -1,30 +1,158 @@
 <script lang="ts">
 	import { onMount, getContext } from 'svelte';
+	import { page } from '$app/stores';
 	import { WEBUI_NAME, showSidebar, mobile } from '$lib/stores';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import SidebarIcon from '$lib/components/icons/Sidebar.svelte';
 	import { enterDashboardSurface } from '$lib/utils/softHome';
+	import {
+		dashboardIndexPath,
+		fetchAecpJson,
+		joinAecpApiUrl,
+		parseDashboardSearch,
+		readStoredAecpApiBase,
+		resolveAecpApiBaseUrl,
+		taskLiveChainPath
+	} from '$lib/utils/aecpProjectApi';
 
 	const i18n = getContext('i18n');
 
-	const cards = [
-		{
-			title: 'Tasks overview',
-			body: 'Placeholder. Task counts will load from the Project API later.'
-		},
-		{
-			title: 'Gates / waiting owner',
-			body: 'Placeholder. Owner gates will load from the Project API later.'
-		},
-		{
-			title: 'Workers / health',
-			body: 'Placeholder. Worker health will load from the Project API later.'
-		},
-		{
-			title: 'Recent activity',
-			body: 'Placeholder. Activity will load from the Project API later.'
+	type LinkStatus = 'ok' | 'degraded' | 'down' | 'idle' | 'unknown';
+
+	type ChainHop = {
+		id: string;
+		label: string;
+		lane: string;
+		status: LinkStatus;
+		summary: string;
+		gap: string | null;
+	};
+
+	type BotHealth = {
+		id: string;
+		label: string;
+		status: LinkStatus;
+		summary: string;
+		stalled: number;
+		recentFailures: number;
+	};
+
+	type DashboardIndex = {
+		overall: LinkStatus;
+		emptyReason: string | null;
+		selected: {
+			overall: LinkStatus;
+			project: { id: string; key: string; name: string };
+			chain: ChainHop[];
+			bots: BotHealth[];
+			temporal: { reachable: boolean; error: string | null };
+			stalledRuns: unknown[];
+			recentFailures: unknown[];
+			openWebUi: { reachable: boolean };
+			devContour: { reachable: boolean };
+		} | null;
+	};
+
+	type LiveChainStep = {
+		role: string;
+		state: string;
+		runId: string | null;
+		resultId: string | null;
+		summary: string | null;
+		artifactCount: number;
+		approvalRequestId: string | null;
+		acceptanceDecisionId: string | null;
+		soft: { langfuseTraceId: string | null; detailsRef: string | null };
+	};
+
+	type LiveChain = {
+		task: { id: string; key: string; status: string; title: string };
+		workflow: { workflowId: string; status: string | null; peekError: string | null };
+		steps: LiveChainStep[];
+	};
+
+	const STEP_LABELS: Record<string, string> = {
+		architect: 'Architect',
+		team_lead: 'Team Lead',
+		developer: 'Developer',
+		qa: 'QA',
+		reviewer: 'Reviewer',
+		acceptance_reviewer: 'Acceptance',
+		owner_gate: 'Owner gate'
+	};
+
+	let health: DashboardIndex | null = null;
+	let healthError: string | null = null;
+	let healthLoading = true;
+	let chain: LiveChain | null = null;
+	let chainError: string | null = null;
+	let chainLoading = false;
+	let openSoftRole: string | null = null;
+	let lastHealthKey = '';
+	let lastChainKey = '';
+
+	$: search = parseDashboardSearch($page.url.search);
+	$: apiBase = resolveAecpApiBaseUrl({
+		queryBase: search.apiBase,
+		storedBase: typeof window === 'undefined' ? null : readStoredAecpApiBase(window.localStorage)
+	});
+
+	$: if (typeof window !== 'undefined' && apiBase) {
+		void loadHealth(apiBase, search.projectId);
+		void loadLiveChain(apiBase, search.taskId);
+	}
+
+	async function loadHealth(base: string, projectId: string | null) {
+		const key = `${base}|${projectId ?? ''}`;
+		if (key === lastHealthKey) return;
+		lastHealthKey = key;
+		healthLoading = true;
+		healthError = null;
+		const result = await fetchAecpJson<DashboardIndex>(
+			joinAecpApiUrl(base, dashboardIndexPath(projectId))
+		);
+		healthLoading = false;
+		if (!result.ok) {
+			health = null;
+			healthError = result.error;
+			return;
 		}
-	];
+		health = result.data;
+	}
+
+	async function loadLiveChain(base: string, taskId: string | null) {
+		const key = `${base}|${taskId ?? ''}`;
+		if (key === lastChainKey) return;
+		lastChainKey = key;
+		if (!taskId) {
+			chain = null;
+			chainError = null;
+			chainLoading = false;
+			return;
+		}
+		chainLoading = true;
+		chainError = null;
+		const result = await fetchAecpJson<LiveChain>(joinAecpApiUrl(base, taskLiveChainPath(taskId)));
+		chainLoading = false;
+		if (!result.ok) {
+			chain = null;
+			chainError = result.status === 404 ? 'Task not found' : result.error;
+			return;
+		}
+		chain = result.data;
+	}
+
+	function stepLabel(role: string): string {
+		return STEP_LABELS[role] ?? role;
+	}
+
+	function hasSoftPeek(step: LiveChainStep): boolean {
+		return Boolean(step.soft.langfuseTraceId || step.soft.detailsRef);
+	}
+
+	function toggleSoft(role: string) {
+		openSoftRole = openSoftRole === role ? null : role;
+	}
 
 	onMount(() => {
 		enterDashboardSurface();
@@ -75,19 +203,136 @@
 
 	<div class="flex-1 max-h-full overflow-y-auto px-4 pb-8 pt-2 md:px-6">
 		<p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400">
-			Live AECP metrics will appear here later via the Project API. The cards below are a layout
-			shell — not live data, and not fabricated numbers.
+			Live Project API projection for Face. PostgreSQL is source of truth. Soft tails stay behind
+			… — not AcceptanceDecision, not Task done, not chat.
 		</p>
 
-		<div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-			{#each cards as card (card.title)}
-				<section
-					class="rounded-xl border border-gray-100 dark:border-gray-850 bg-gray-50/70 dark:bg-gray-850/40 p-4"
-				>
-					<h2 class="text-sm font-medium text-gray-800 dark:text-gray-100">{card.title}</h2>
-					<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{card.body}</p>
-				</section>
-			{/each}
-		</div>
+		<section class="mt-5" aria-labelledby="layer-a-heading">
+			<h2 id="layer-a-heading" class="text-sm font-medium text-gray-800 dark:text-gray-100">
+				System health
+			</h2>
+			{#if healthLoading}
+				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading project dashboard…</p>
+			{:else if healthError}
+				<p class="mt-2 text-sm text-red-600 dark:text-red-400">
+					Could not load GET /api/v1/dashboard ({healthError}). Check AECP_API_BASE_URL /
+					?apiBase= and CORS.
+				</p>
+			{:else if health?.emptyReason}
+				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{health.emptyReason}</p>
+			{:else if health?.selected}
+				{@const selected = health.selected}
+				<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+					{selected.project.key} · {selected.project.name} · overall {selected.overall}
+				</p>
+				<div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+					<section
+						class="rounded-xl border border-gray-100 dark:border-gray-850 bg-gray-50/70 dark:bg-gray-850/40 p-4"
+					>
+						<h3 class="text-sm font-medium text-gray-800 dark:text-gray-100">Chain hops</h3>
+						<ul class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+							{#each selected.chain as hop (hop.id)}
+								<li>
+									<span class="font-medium">{hop.label}</span>
+									<span class="text-gray-400">· {hop.status}</span>
+									<span class="text-gray-500 dark:text-gray-400"> — {hop.summary}</span>
+								</li>
+							{/each}
+						</ul>
+					</section>
+					<section
+						class="rounded-xl border border-gray-100 dark:border-gray-850 bg-gray-50/70 dark:bg-gray-850/40 p-4"
+					>
+						<h3 class="text-sm font-medium text-gray-800 dark:text-gray-100">Bots / Temporal</h3>
+						<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+							Temporal {selected.temporal.reachable ? 'reachable' : 'unreachable'}
+							{#if selected.temporal.error}
+								<span class="text-gray-500">({selected.temporal.error})</span>
+							{/if}
+						</p>
+						<p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+							Stalled runs {selected.stalledRuns.length} · recent failures {selected.recentFailures
+								.length}
+						</p>
+						<ul class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+							{#each selected.bots as bot (bot.id)}
+								<li>
+									<span class="font-medium">{bot.label}</span>
+									<span class="text-gray-400">· {bot.status}</span>
+									<span class="text-gray-500"> — stalled {bot.stalled}</span>
+								</li>
+							{/each}
+						</ul>
+					</section>
+				</div>
+			{/if}
+		</section>
+
+		<section class="mt-8" aria-labelledby="layer-b10-heading">
+			<h2 id="layer-b10-heading" class="text-sm font-medium text-gray-800 dark:text-gray-100">
+				Task theater
+			</h2>
+			{#if !search.taskId}
+				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+					Pass <code class="text-xs">?taskId=</code> to load the Architect → Owner-gate strip from
+					<code class="text-xs">GET /api/v1/tasks/:taskId/live-chain</code>. Default focus Task is
+					not chosen yet.
+				</p>
+			{:else if chainLoading}
+				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading live-chain…</p>
+			{:else if chainError}
+				<p class="mt-2 text-sm text-red-600 dark:text-red-400">{chainError}</p>
+			{:else if chain}
+				<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+					{chain.task.key} · {chain.task.title} · task {chain.task.status} · workflow
+					{chain.workflow.status ?? 'unknown'}
+					{#if chain.workflow.peekError}
+						(peek fail-open: {chain.workflow.peekError})
+					{/if}
+				</p>
+				<ol class="mt-3 flex flex-wrap gap-2">
+					{#each chain.steps as step (step.role)}
+						<li
+							class="min-w-[9.5rem] flex-1 rounded-xl border border-gray-100 dark:border-gray-850 bg-gray-50/70 dark:bg-gray-850/40 p-3"
+						>
+							<div class="flex items-start justify-between gap-2">
+								<div>
+									<p class="text-sm font-medium text-gray-800 dark:text-gray-100">
+										{stepLabel(step.role)}
+									</p>
+									<p class="mt-0.5 text-xs uppercase tracking-wide text-gray-500">
+										{step.state.replaceAll('_', ' ')}
+									</p>
+								</div>
+								{#if hasSoftPeek(step)}
+									<button
+										type="button"
+										class="rounded px-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+										aria-expanded={openSoftRole === step.role}
+										aria-label="Soft tails"
+										on:click={() => toggleSoft(step.role)}
+									>
+										…
+									</button>
+								{/if}
+							</div>
+							{#if step.summary}
+								<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{step.summary}</p>
+							{/if}
+							<p class="mt-1 text-xs text-gray-400">
+								artifacts {step.artifactCount}
+							</p>
+							{#if openSoftRole === step.role}
+								<div class="mt-2 rounded-lg bg-white/70 p-2 text-xs text-gray-600 dark:bg-black/20 dark:text-gray-300">
+									<p>Langfuse: {step.soft.langfuseTraceId ?? 'none'}</p>
+									<p>Details ref: {step.soft.detailsRef ?? 'none'}</p>
+									<p class="mt-1 text-gray-400">Soft peek only — not SoT.</p>
+								</div>
+							{/if}
+						</li>
+					{/each}
+				</ol>
+			{/if}
+		</section>
 	</div>
 </div>
