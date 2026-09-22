@@ -126,6 +126,20 @@
 		queryBase: search.apiBase,
 		storedBase: typeof window === 'undefined' ? null : readStoredAecpApiBase(window.localStorage)
 	});
+	/**
+	 * Pin the default focus Task once, so a later poll does not retarget the strip.
+	 * Must stay a pure derived value with NO read of `pinnedTaskId`: any read here
+	 * makes the pin-writer block below re-trigger this statement and Svelte rejects
+	 * the result as `resolvedTaskId → pinnedTaskId → resolvedTaskId`.
+	 */
+	$: pinnedFocusTaskId = focusTaskIdToPin({
+		queryTaskId: search.taskId,
+		focusTaskId: health?.selected?.focusTask?.id ?? null
+	});
+	$: if (pinnedFocusTaskId && !pinnedTaskId) {
+		pinnedTaskId = pinnedFocusTaskId;
+		softSetTaskId(pinnedFocusTaskId);
+	}
 	$: resolvedTaskId = resolveDashboardTaskId({
 		queryTaskId: search.taskId,
 		pinnedTaskId,
@@ -137,15 +151,6 @@
 		void loadHealth(apiBase, search.projectId);
 		const projectId = health?.selected?.project.id ?? null;
 		if (projectId) void loadProjectTasks(apiBase, projectId);
-		const pin = focusTaskIdToPin({
-			queryTaskId: search.taskId,
-			pinnedTaskId,
-			focusTaskId: health?.selected?.focusTask?.id ?? null
-		});
-		if (pin) {
-			pinnedTaskId = pin;
-			softSetTaskId(pin);
-		}
 		if (search.taskId || pinnedTaskId || health !== null || healthError) {
 			void loadLiveChain(apiBase, resolvedTaskId);
 		}

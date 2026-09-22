@@ -112,10 +112,11 @@ export function resolveDashboardTaskId(input: {
 /** Pin the default focus Task once, so a later poll does not retarget the strip. */
 export function focusTaskIdToPin(input: {
 	queryTaskId: string | null;
-	pinnedTaskId: string | null;
+	pinnedTaskId?: string | null;
 	focusTaskId: string | null;
 }): string | null {
-	if (input.queryTaskId || input.pinnedTaskId) return null;
+	if (input.pinnedTaskId) return null;
+	if (input.queryTaskId) return null;
 	return firstNonEmpty(input.focusTaskId);
 }
 
