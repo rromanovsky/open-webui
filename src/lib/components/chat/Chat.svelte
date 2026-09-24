@@ -441,11 +441,7 @@
 			: 'full';
 
 	$: thinkingModelId = selectedModelIds?.[0] || selectedModels?.[0] || '';
-	$: thinkingLevel = resolveThinkingLevel(
-		thinkingModelId,
-		params,
-		$settings?.thinking_by_model
-	);
+	$: thinkingLevel = resolveThinkingLevel(thinkingModelId, params, $settings?.thinking_by_model);
 
 	const handleThinkingChange = async (level: ThinkingLevel) => {
 		if (!thinkingModelId) {

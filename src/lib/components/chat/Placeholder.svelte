@@ -10,12 +10,7 @@
 
 	import { updateFolderById } from '$lib/apis/folders';
 
-	import {
-		user,
-		models as _models,
-		temporaryChatEnabled,
-		selectedFolder
-	} from '$lib/stores';
+	import { user, models as _models, temporaryChatEnabled, selectedFolder } from '$lib/stores';
 	import { refreshChatList, refreshFolderChatLists } from '$lib/stores/chatList';
 	import { sanitizeResponseContent, extractCurlyBraceWords } from '$lib/utils';
 	import {

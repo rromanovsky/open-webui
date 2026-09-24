@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	hasChatIntentQuery,
-	normalizePathname,
-	shouldSoftRedirectToDashboard
-} from './softHome';
+import { hasChatIntentQuery, normalizePathname, shouldSoftRedirectToDashboard } from './softHome';
 
 describe('normalizePathname', () => {
 	it('treats empty and trailing slashes as root', () => {
@@ -34,9 +30,7 @@ describe('hasChatIntentQuery', () => {
 describe('shouldSoftRedirectToDashboard', () => {
 	it('redirects a cold signed-in visit to /', () => {
 		expect(shouldSoftRedirectToDashboard({ pathname: '/' })).toBe(true);
-		expect(shouldSoftRedirectToDashboard({ pathname: '/', lastSurface: 'dashboard' })).toBe(
-			true
-		);
+		expect(shouldSoftRedirectToDashboard({ pathname: '/', lastSurface: 'dashboard' })).toBe(true);
 	});
 
 	it('does not steal chat, share, workspace, admin, or auth routes', () => {
@@ -62,8 +56,6 @@ describe('shouldSoftRedirectToDashboard', () => {
 		expect(shouldSoftRedirectToDashboard({ pathname: '/', stayOnChat: true })).toBe(false);
 		expect(shouldSoftRedirectToDashboard({ pathname: '/', lastSurface: 'chat' })).toBe(false);
 		expect(shouldSoftRedirectToDashboard({ pathname: '/', search: '?q=hi' })).toBe(false);
-		expect(shouldSoftRedirectToDashboard({ pathname: '/', search: '?models=hermes' })).toBe(
-			false
-		);
+		expect(shouldSoftRedirectToDashboard({ pathname: '/', search: '?models=hermes' })).toBe(false);
 	});
 });

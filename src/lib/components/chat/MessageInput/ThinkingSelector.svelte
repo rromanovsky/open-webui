@@ -8,10 +8,7 @@
 	import Bolt from '$lib/components/icons/Bolt.svelte';
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import { docsSyncLabelFromKnowledgePayload } from '$lib/utils/docsSyncStamp';
-	import {
-		THINKING_LEVELS,
-		type ThinkingLevel
-	} from '$lib/utils/thinking';
+	import { THINKING_LEVELS, type ThinkingLevel } from '$lib/utils/thinking';
 
 	const i18n = getContext('i18n');
 

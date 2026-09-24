@@ -2,8 +2,7 @@
 
 export const AECP_DOCS_KNOWLEDGE_NAME = 'AECP docs';
 
-const LAST_SYNCED_RE =
-	/Last synced:\s*(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::\d{2})?/i;
+const LAST_SYNCED_RE = /Last synced:\s*(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::\d{2})?/i;
 
 /** Compact UI label: "18:54 - 17.09.2026" */
 export function formatDocsSyncStampLabel(raw: string | null | undefined): string | null {
@@ -14,7 +13,9 @@ export function formatDocsSyncStampLabel(raw: string | null | undefined): string
 	return `${hour}:${minute} - ${day}.${month}.${year}`;
 }
 
-export function knowledgeListItems(payload: unknown): Array<{ name?: string; description?: string }> {
+export function knowledgeListItems(
+	payload: unknown
+): Array<{ name?: string; description?: string }> {
 	if (Array.isArray(payload)) return payload;
 	if (payload && typeof payload === 'object') {
 		const obj = payload as { items?: unknown; data?: unknown };
