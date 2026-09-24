@@ -8,11 +8,13 @@ export function isThinkingLevel(value: unknown): value is ThinkingLevel {
 	return typeof value === 'string' && (THINKING_LEVELS as readonly string[]).includes(value);
 }
 
-export function compactThinkingModelLabel(model?: {
-	id?: string;
-	name?: string;
-	info?: { base_model_id?: string | null };
-} | null): string {
+export function compactThinkingModelLabel(
+	model?: {
+		id?: string;
+		name?: string;
+		info?: { base_model_id?: string | null };
+	} | null
+): string {
 	const raw = (model?.info?.base_model_id || model?.id || '').trim();
 	if (!raw) {
 		return '';

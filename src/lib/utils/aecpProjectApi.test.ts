@@ -21,7 +21,7 @@ import {
 describe('rewriteDockerDesktopHost', () => {
 	it('rewrites Compose hostname to loopback for the browser Face', () => {
 		expect(rewriteDockerDesktopHost('http://host.docker.internal:3000')).toBe(
-			'http://127.0.0.1:3010'
+			'http://127.0.0.1:3000'
 		);
 	});
 

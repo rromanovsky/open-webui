@@ -78,9 +78,7 @@ export function readLastSurface(
 	}
 }
 
-export function markStayOnChat(
-	storage: Storage | undefined = browserStorage('session')
-): void {
+export function markStayOnChat(storage: Storage | undefined = browserStorage('session')): void {
 	try {
 		storage?.setItem(AECP_OWUI_STAY_ON_CHAT_KEY, '1');
 	} catch {
@@ -88,9 +86,7 @@ export function markStayOnChat(
 	}
 }
 
-export function readStayOnChat(
-	storage: Storage | undefined = browserStorage('session')
-): boolean {
+export function readStayOnChat(storage: Storage | undefined = browserStorage('session')): boolean {
 	try {
 		return storage?.getItem(AECP_OWUI_STAY_ON_CHAT_KEY) === '1';
 	} catch {
@@ -98,9 +94,7 @@ export function readStayOnChat(
 	}
 }
 
-export function clearStayOnChat(
-	storage: Storage | undefined = browserStorage('session')
-): void {
+export function clearStayOnChat(storage: Storage | undefined = browserStorage('session')): void {
 	try {
 		storage?.removeItem(AECP_OWUI_STAY_ON_CHAT_KEY);
 	} catch {
