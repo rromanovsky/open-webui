@@ -1,6 +1,6 @@
 /** Face → Project API helpers. Same origin env as Concierge (`AECP_API_BASE_URL`). */
 
-export const AECP_API_BASE_DEFAULT = 'http://127.0.0.1:3000';
+export const AECP_API_BASE_DEFAULT = 'http://127.0.0.1:3010';
 export const AECP_API_BASE_STORAGE_KEY = 'aecp.apiBaseUrl';
 export const DOCKER_DESKTOP_HOST = 'host.docker.internal';
 

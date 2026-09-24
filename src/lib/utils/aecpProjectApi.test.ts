@@ -21,12 +21,12 @@ import {
 describe('rewriteDockerDesktopHost', () => {
 	it('rewrites Compose hostname to loopback for the browser Face', () => {
 		expect(rewriteDockerDesktopHost('http://host.docker.internal:3000')).toBe(
-			'http://127.0.0.1:3000'
+			'http://127.0.0.1:3010'
 		);
 	});
 
 	it('leaves loopback origins intact', () => {
-		expect(rewriteDockerDesktopHost('http://127.0.0.1:3000/')).toBe('http://127.0.0.1:3000');
+		expect(rewriteDockerDesktopHost('http://127.0.0.1:3010/')).toBe('http://127.0.0.1:3010');
 	});
 });
 
@@ -35,7 +35,7 @@ describe('resolveAecpApiBaseUrl', () => {
 		expect(
 			resolveAecpApiBaseUrl({
 				queryBase: 'http://127.0.0.1:3010',
-				storedBase: 'http://127.0.0.1:3000'
+				storedBase: 'http://127.0.0.1:3010'
 			})
 		).toBe('http://127.0.0.1:3010');
 		expect(resolveAecpApiBaseUrl({ storedBase: 'http://host.docker.internal:3000' })).toBe(
@@ -52,8 +52,8 @@ describe('paths and search', () => {
 		expect(taskLiveChainPath('task-1')).toBe('/api/v1/tasks/task-1/live-chain');
 		expect(projectTasksPath('proj-1')).toBe('/api/v1/projects/proj-1/tasks');
 		expect(resultPath('result-1')).toBe('/api/v1/results/result-1');
-		expect(joinAecpApiUrl('http://127.0.0.1:3000', taskLiveChainPath('task-1'))).toBe(
-			'http://127.0.0.1:3000/api/v1/tasks/task-1/live-chain'
+		expect(joinAecpApiUrl('http://127.0.0.1:3010', taskLiveChainPath('task-1'))).toBe(
+			'http://127.0.0.1:3010/api/v1/tasks/task-1/live-chain'
 		);
 	});
 
