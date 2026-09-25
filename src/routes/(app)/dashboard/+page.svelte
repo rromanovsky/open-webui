@@ -25,8 +25,9 @@
 		type DashboardTaskOption
 	} from '$lib/utils/aecpProjectApi';
 	import {
+		canOpenStepPanel,
 		formatResultDetails,
-		hasSoftPeek,
+		stepStripClass,
 		temporalUiHref,
 		type FaceConciergePeek,
 		type FaceLiveChainStep
@@ -497,9 +498,8 @@
 				</div>
 				<ol class="mt-3 flex flex-wrap gap-2">
 					{#each chain.steps as step (step.role)}
-						<li
-							class="min-w-[9.5rem] flex-1 rounded-xl border border-gray-100 dark:border-gray-850 bg-gray-50/70 dark:bg-gray-850/40 p-3"
-						>
+						{@const stepTemporalHref = temporalUiHref(chain.workflow?.uiUrl)}
+						<li class={stepStripClass(step.state)}>
 							<div class="flex items-start justify-between gap-2">
 								<div>
 									<p class="text-sm font-medium text-gray-800 dark:text-gray-100">
@@ -513,8 +513,8 @@
 									type="button"
 									class="rounded px-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 									aria-expanded={openSoftRole === step.role}
-									aria-label="Soft tails"
-									disabled={!hasSoftPeek(step, chain.conciergePeek)}
+									aria-label="Committed and Peek"
+									disabled={!canOpenStepPanel(step, chain.conciergePeek, chain.workflow?.uiUrl)}
 									on:click={() => toggleSoft(step)}
 								>
 									…
@@ -531,12 +531,12 @@
 							</p>
 							{#if openSoftRole === step.role}
 								<div
-									class="mt-2 space-y-2 rounded-lg bg-white/70 p-2 text-xs text-gray-600 dark:bg-black/20 dark:text-gray-300"
+									class="mt-2 space-y-3 rounded-lg bg-white/70 p-2 text-xs text-gray-600 dark:bg-black/20 dark:text-gray-300"
 								>
-									{#if step.soft.detailsRef}
-										{@const details = detailsByRef[step.soft.detailsRef]}
-										<section>
-											<p class="font-medium text-gray-700 dark:text-gray-200">Result details</p>
+									<section>
+										<p class="font-medium text-gray-700 dark:text-gray-200">Committed (SoT)</p>
+										{#if step.soft.detailsRef}
+											{@const details = detailsByRef[step.soft.detailsRef]}
 											{#if details?.status === 'loading'}
 												<p class="mt-1 text-gray-400">Loading Result.details…</p>
 											{:else if details?.status === 'error'}
@@ -549,35 +549,71 @@
 														details.json
 													)}</pre>
 											{/if}
-										</section>
-									{/if}
-									{#if step.soft.langfuseTraceUrl}
-										<p>
-											<a
-												class="text-blue-600 underline dark:text-blue-400"
-												href={step.soft.langfuseTraceUrl}
-												target="_blank"
-												rel="noreferrer"
-											>
-												Open Langfuse
-											</a>
+										{:else}
+											<p class="mt-1 text-gray-400">No Result.details for this step yet.</p>
+										{/if}
+									</section>
+
+									<section>
+										<p class="font-medium text-gray-700 dark:text-gray-200">
+											Peek · Thoughts <span class="font-normal text-gray-400">(not SoT)</span>
 										</p>
-									{:else if step.soft.langfuseTraceId}
-										<p>Langfuse trace {step.soft.langfuseTraceId} (no LANGFUSE_HOST)</p>
-									{/if}
+										{#if step.soft.langfuseTraceUrl}
+											<p class="mt-1">
+												<a
+													class="text-blue-600 underline dark:text-blue-400"
+													href={step.soft.langfuseTraceUrl}
+													target="_blank"
+													rel="noreferrer"
+													title="Model prompt/completion live in Langfuse — not AECP SoT"
+												>
+													Open Langfuse
+												</a>
+											</p>
+										{:else if step.soft.langfuseTraceId}
+											<p class="mt-1 text-gray-400">
+												Trace {step.soft.langfuseTraceId} (set LANGFUSE_HOST for a link)
+											</p>
+										{:else}
+											<p class="mt-1 text-gray-400">No Langfuse trace for this run.</p>
+										{/if}
+									</section>
+
+									<section>
+										<p class="font-medium text-gray-700 dark:text-gray-200">
+											Peek · Actions <span class="font-normal text-gray-400">(not SoT)</span>
+										</p>
+										{#if stepTemporalHref}
+											<p class="mt-1">
+												<a
+													class="text-blue-600 underline dark:text-blue-400"
+													href={stepTemporalHref}
+													target="_blank"
+													rel="noreferrer"
+													title="Temporal history is not source of truth"
+												>
+													Open Temporal
+												</a>
+												<span class="text-gray-400"> — workflow activity / worker I/O</span>
+											</p>
+										{:else}
+											<p class="mt-1 text-gray-400">
+												No Temporal UI link (set TEMPORAL_UI_URL). Worker log ring is Phase 3b.
+											</p>
+										{/if}
+									</section>
+
 									{#if chain.conciergePeek}
 										<section>
-											<p class="font-medium text-gray-700 dark:text-gray-200">Concierge peek</p>
+											<p class="font-medium text-gray-700 dark:text-gray-200">
+												Peek · Concierge <span class="font-normal text-gray-400">(not SoT)</span>
+											</p>
 											<p class="mt-0.5">{chain.conciergePeek.responseKind}</p>
 											{#if chain.conciergePeek.recommendationSummary}
 												<p class="mt-0.5">{chain.conciergePeek.recommendationSummary}</p>
 											{/if}
 										</section>
 									{/if}
-									{#if !hasSoftPeek(step, chain.conciergePeek)}
-										<p>No soft tails for this step.</p>
-									{/if}
-									<p class="text-gray-400">Soft peek only — not SoT.</p>
 								</div>
 							{/if}
 						</li>

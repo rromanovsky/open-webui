@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatResultDetails, hasSoftPeek, type FaceLiveChainStep } from './liveChainSoft';
+import {
+	canOpenStepPanel,
+	formatResultDetails,
+	hasSoftPeek,
+	stepStripClass,
+	type FaceLiveChainStep
+} from './liveChainSoft';
 
 const RESULT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
@@ -47,6 +53,23 @@ describe('hasSoftPeek', () => {
 				recommendationSummary: null
 			})
 		).toBe(true);
+	});
+});
+
+describe('canOpenStepPanel', () => {
+	it('opens when Temporal UI URL is present even without soft tails', () => {
+		expect(canOpenStepPanel(step(emptySoft), null, 'http://127.0.0.1:8088')).toBe(true);
+	});
+
+	it('stays closed for empty soft and non-http Temporal address', () => {
+		expect(canOpenStepPanel(step(emptySoft), null, '127.0.0.1:7233')).toBe(false);
+	});
+});
+
+describe('stepStripClass', () => {
+	it('emphasizes running steps', () => {
+		expect(stepStripClass('running')).toContain('ring-2');
+		expect(stepStripClass('succeeded')).not.toContain('ring-2');
 	});
 });
 
