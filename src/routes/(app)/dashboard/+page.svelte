@@ -20,12 +20,14 @@
 		resolveAecpApiBaseUrl,
 		resolveDashboardTaskId,
 		resultPath,
+		runPath,
 		taskLiveChainPath,
 		withDashboardTaskId,
 		type DashboardTaskOption
 	} from '$lib/utils/aecpProjectApi';
 	import {
-		canOpenStepPanel,
+		committedFields,
+		defaultFocusedStepRole,
 		formatResultDetails,
 		stepStripClass,
 		temporalUiHref,
@@ -88,10 +90,20 @@
 		conciergePeek: FaceConciergePeek;
 	};
 
+	type ResultBody = {
+		details: unknown;
+		criteriaClaims?: unknown;
+	};
+
 	type DetailsState =
 		| { status: 'loading' }
-		| { status: 'ok'; json: unknown }
-		| { status: 'error'; error: string };
+		| { status: 'ok'; body: ResultBody }
+		| { status: 'error' };
+
+	type RunState =
+		| { status: 'loading' }
+		| { status: 'ok'; inputSnapshot: unknown }
+		| { status: 'error' };
 
 	const STEP_LABELS: Record<string, string> = {
 		architect: 'Architect',
@@ -111,8 +123,10 @@
 	let chainLoading = false;
 	let projectTasks: DashboardTaskOption[] = [];
 	let pinnedTaskId: string | null = null;
-	let openSoftRole: string | null = null;
+	let focusedRole: string | null = null;
+	let focusForTaskId: string | null = null;
 	let detailsByRef: Record<string, DetailsState> = {};
+	let runById: Record<string, RunState> = {};
 	let lastHealthKey = '';
 	let lastChainKey = '';
 	let lastTasksKey = '';
@@ -168,7 +182,8 @@
 	function pickTask(taskId: string) {
 		if (!taskId || taskId === resolvedTaskId) return;
 		pinnedTaskId = taskId;
-		openSoftRole = null;
+		focusedRole = null;
+		focusForTaskId = null;
 		softSetTaskId(taskId);
 	}
 
@@ -236,6 +251,7 @@
 		}
 		chainError = null;
 		chain = result.data;
+		ensureFocusedStep(result.data, base);
 	}
 
 	function stopDashboardPoll() {
@@ -288,26 +304,52 @@
 		return STEP_LABELS[role] ?? role;
 	}
 
-	function toggleSoft(step: LiveChainStep) {
-		const next = openSoftRole === step.role ? null : step.role;
-		openSoftRole = next;
-		if (next && step.soft.detailsRef && apiBase) {
-			void loadResultDetails(apiBase, step.soft.detailsRef);
+	function ensureFocusedStep(next: LiveChain, base: string) {
+		const stillValid =
+			focusForTaskId === next.task.id &&
+			focusedRole !== null &&
+			next.steps.some((step) => step.role === focusedRole);
+		if (!stillValid) {
+			focusForTaskId = next.task.id;
+			focusedRole = defaultFocusedStepRole(next.steps);
 		}
+		const step = next.steps.find((item) => item.role === focusedRole);
+		if (!step) return;
+		if (step.soft.detailsRef) void loadResultDetails(base, step.soft.detailsRef);
+		if (step.runId) void loadRunSnapshot(base, step.runId);
+	}
+
+	function focusStep(step: LiveChainStep) {
+		focusedRole = step.role;
+		if (!apiBase) return;
+		if (step.soft.detailsRef) void loadResultDetails(apiBase, step.soft.detailsRef);
+		if (step.runId) void loadRunSnapshot(apiBase, step.runId);
 	}
 
 	async function loadResultDetails(base: string, resultId: string) {
 		const current = detailsByRef[resultId];
 		if (current?.status === 'ok' || current?.status === 'loading') return;
 		detailsByRef = { ...detailsByRef, [resultId]: { status: 'loading' } };
-		const result = await fetchAecpJson<{ details: unknown }>(
-			joinAecpApiUrl(base, resultPath(resultId))
-		);
+		const result = await fetchAecpJson<ResultBody>(joinAecpApiUrl(base, resultPath(resultId)));
 		if (!result.ok) {
-			detailsByRef = { ...detailsByRef, [resultId]: { status: 'error', error: result.error } };
+			detailsByRef = { ...detailsByRef, [resultId]: { status: 'error' } };
 			return;
 		}
-		detailsByRef = { ...detailsByRef, [resultId]: { status: 'ok', json: result.data.details } };
+		detailsByRef = { ...detailsByRef, [resultId]: { status: 'ok', body: result.data } };
+	}
+
+	async function loadRunSnapshot(base: string, runId: string) {
+		const current = runById[runId];
+		if (current?.status === 'ok' || current?.status === 'loading') return;
+		runById = { ...runById, [runId]: { status: 'loading' } };
+		const result = await fetchAecpJson<{ inputSnapshot?: unknown }>(
+			joinAecpApiUrl(base, runPath(runId))
+		);
+		if (!result.ok) {
+			runById = { ...runById, [runId]: { status: 'error' } };
+			return;
+		}
+		runById = { ...runById, [runId]: { status: 'ok', inputSnapshot: result.data.inputSnapshot } };
 	}
 
 	onMount(() => {
@@ -498,127 +540,159 @@
 				</div>
 				<ol class="mt-3 flex flex-wrap gap-2">
 					{#each chain.steps as step (step.role)}
-						{@const stepTemporalHref = temporalUiHref(chain.workflow?.uiUrl)}
-						<li class={stepStripClass(step.state)}>
-							<div class="flex items-start justify-between gap-2">
-								<div>
-									<p class="text-sm font-medium text-gray-800 dark:text-gray-100">
-										{stepLabel(step.role)}
-									</p>
-									<p class="mt-0.5 text-xs uppercase tracking-wide text-gray-500">
-										{step.state.replaceAll('_', ' ')}
-									</p>
-								</div>
-								<button
-									type="button"
-									class="rounded px-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-									aria-expanded={openSoftRole === step.role}
-									aria-label="Committed and Peek"
-									disabled={!canOpenStepPanel(step, chain.conciergePeek, chain.workflow?.uiUrl)}
-									on:click={() => toggleSoft(step)}
-								>
-									…
-								</button>
-							</div>
-							{#if step.summary}
-								<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{step.summary}</p>
-							{/if}
-							{#if step.errorHint}
-								<p class="mt-1 text-xs text-red-600 dark:text-red-400">{step.errorHint}</p>
-							{/if}
-							<p class="mt-1 text-xs text-gray-400">
-								artifacts {step.artifactCount}
-							</p>
-							{#if openSoftRole === step.role}
-								<div
-									class="mt-2 space-y-3 rounded-lg bg-white/70 p-2 text-xs text-gray-600 dark:bg-black/20 dark:text-gray-300"
-								>
-									<section>
-										<p class="font-medium text-gray-700 dark:text-gray-200">Committed (SoT)</p>
-										{#if step.soft.detailsRef}
-											{@const details = detailsByRef[step.soft.detailsRef]}
-											{#if details?.status === 'loading'}
-												<p class="mt-1 text-gray-400">Loading Result.details…</p>
-											{:else if details?.status === 'error'}
-												<p class="mt-1 text-gray-400">
-													Details unavailable ({details.error}). Card still works.
-												</p>
-											{:else if details?.status === 'ok'}
-												<pre
-													class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] text-gray-600 dark:text-gray-300">{formatResultDetails(
-														details.json
-													)}</pre>
-											{/if}
-										{:else}
-											<p class="mt-1 text-gray-400">No Result.details for this step yet.</p>
-										{/if}
-									</section>
-
-									<section>
-										<p class="font-medium text-gray-700 dark:text-gray-200">
-											Peek · Thoughts <span class="font-normal text-gray-400">(not SoT)</span>
-										</p>
-										{#if step.soft.langfuseTraceUrl}
-											<p class="mt-1">
-												<a
-													class="text-blue-600 underline dark:text-blue-400"
-													href={step.soft.langfuseTraceUrl}
-													target="_blank"
-													rel="noreferrer"
-													title="Model prompt/completion live in Langfuse — not AECP SoT"
-												>
-													Open Langfuse
-												</a>
-											</p>
-										{:else if step.soft.langfuseTraceId}
-											<p class="mt-1 text-gray-400">
-												Trace {step.soft.langfuseTraceId} (set LANGFUSE_HOST for a link)
-											</p>
-										{:else}
-											<p class="mt-1 text-gray-400">No Langfuse trace for this run.</p>
-										{/if}
-									</section>
-
-									<section>
-										<p class="font-medium text-gray-700 dark:text-gray-200">
-											Peek · Actions <span class="font-normal text-gray-400">(not SoT)</span>
-										</p>
-										{#if stepTemporalHref}
-											<p class="mt-1">
-												<a
-													class="text-blue-600 underline dark:text-blue-400"
-													href={stepTemporalHref}
-													target="_blank"
-													rel="noreferrer"
-													title="Temporal history is not source of truth"
-												>
-													Open Temporal
-												</a>
-												<span class="text-gray-400"> — workflow activity / worker I/O</span>
-											</p>
-										{:else}
-											<p class="mt-1 text-gray-400">
-												No Temporal UI link (set TEMPORAL_UI_URL). Worker log ring is Phase 3b.
-											</p>
-										{/if}
-									</section>
-
-									{#if chain.conciergePeek}
-										<section>
-											<p class="font-medium text-gray-700 dark:text-gray-200">
-												Peek · Concierge <span class="font-normal text-gray-400">(not SoT)</span>
-											</p>
-											<p class="mt-0.5">{chain.conciergePeek.responseKind}</p>
-											{#if chain.conciergePeek.recommendationSummary}
-												<p class="mt-0.5">{chain.conciergePeek.recommendationSummary}</p>
-											{/if}
-										</section>
-									{/if}
-								</div>
-							{/if}
+						<li>
+							<button
+								type="button"
+								class="{stepStripClass(step.state)} {step.role === focusedRole
+									? 'outline outline-2 outline-offset-2 outline-gray-900 dark:outline-gray-100'
+									: ''}"
+								aria-current={step.role === focusedRole ? 'step' : undefined}
+								on:click={() => focusStep(step)}
+							>
+								<p class="text-sm font-medium text-gray-800 dark:text-gray-100 no-underline">
+									{stepLabel(step.role)}
+								</p>
+								<p class="mt-0.5 text-xs uppercase tracking-wide text-gray-500 no-underline">
+									{step.state.replaceAll('_', ' ')}
+								</p>
+							</button>
 						</li>
 					{/each}
 				</ol>
+				{#if focusedRole}
+					{@const step = chain.steps.find((item) => item.role === focusedRole)}
+					{#if step}
+						{@const stepTemporalHref = temporalUiHref(chain.workflow?.uiUrl)}
+						{@const details = step.soft.detailsRef ? detailsByRef[step.soft.detailsRef] : undefined}
+						{@const run = step.runId ? runById[step.runId] : undefined}
+						{@const fields =
+							details?.status === 'ok'
+								? committedFields({
+										details: details.body.details,
+										criteriaClaims: details.body.criteriaClaims,
+										inputSnapshot: run?.status === 'ok' ? run.inputSnapshot : undefined
+									})
+								: null}
+						<section
+							class="mt-3 max-w-3xl space-y-3 rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-sm dark:border-gray-850 dark:bg-gray-850/40"
+							aria-label="Focused step"
+						>
+							<p class="font-medium text-gray-800 dark:text-gray-100">
+								{stepLabel(step.role)}
+								<span class="font-normal text-gray-500">· {step.state.replaceAll('_', ' ')}</span>
+							</p>
+							{#if step.summary}
+								<p class="text-gray-600 dark:text-gray-300">{step.summary}</p>
+							{:else}
+								<p class="text-gray-400">No summary yet.</p>
+							{/if}
+							{#if step.errorHint}
+								<p class="text-xs text-red-600 dark:text-red-400">{step.errorHint}</p>
+							{/if}
+							<p class="text-xs text-gray-400">artifacts {step.artifactCount}</p>
+
+							<section>
+								<p class="font-medium text-gray-700 dark:text-gray-200">Committed (SoT)</p>
+								{#if !step.soft.detailsRef}
+									<p class="mt-1 text-xs text-gray-400">No Result.details for this step yet.</p>
+								{:else if details?.status === 'loading'}
+									<p class="mt-1 text-xs text-gray-400">Loading Result.details…</p>
+								{:else if details?.status === 'ok' && fields}
+									{#if fields.recommendation != null}
+										<p class="mt-2 text-xs font-medium text-gray-500">recommendation</p>
+										<pre
+											class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] text-gray-600 dark:text-gray-300">{formatResultDetails(
+												fields.recommendation
+											)}</pre>
+									{/if}
+									{#if fields.criteriaClaims != null}
+										<p class="mt-2 text-xs font-medium text-gray-500">criteriaClaims</p>
+										<pre
+											class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] text-gray-600 dark:text-gray-300">{formatResultDetails(
+												fields.criteriaClaims
+											)}</pre>
+									{/if}
+									{#if fields.otherDetails != null}
+										<pre
+											class="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] text-gray-600 dark:text-gray-300">{formatResultDetails(
+												fields.otherDetails
+											)}</pre>
+									{/if}
+									{#if fields.inputSnapshot != null}
+										<details class="mt-2">
+											<summary class="cursor-pointer text-xs text-gray-500">inputSnapshot</summary>
+											<pre
+												class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] text-gray-600 dark:text-gray-300">{formatResultDetails(
+													fields.inputSnapshot
+												)}</pre>
+										</details>
+									{/if}
+								{/if}
+							</section>
+
+							<section>
+								<p class="font-medium text-gray-700 dark:text-gray-200">
+									Peek · Thoughts <span class="font-normal text-gray-400">(not SoT)</span>
+								</p>
+								{#if step.soft.langfuseTraceUrl}
+									<p class="mt-1 text-xs">
+										<a
+											class="text-blue-600 underline dark:text-blue-400"
+											href={step.soft.langfuseTraceUrl}
+											target="_blank"
+											rel="noreferrer"
+											title="Model prompt/completion live in Langfuse — not AECP SoT"
+										>
+											Open Langfuse
+										</a>
+									</p>
+								{:else if step.soft.langfuseTraceId}
+									<p class="mt-1 text-xs text-gray-400">
+										Trace {step.soft.langfuseTraceId} (set LANGFUSE_HOST for a link)
+									</p>
+								{:else}
+									<p class="mt-1 text-xs text-gray-400">No Langfuse trace for this run.</p>
+								{/if}
+							</section>
+
+							<section>
+								<p class="font-medium text-gray-700 dark:text-gray-200">
+									Peek · Actions <span class="font-normal text-gray-400">(not SoT)</span>
+								</p>
+								{#if stepTemporalHref}
+									<p class="mt-1 text-xs">
+										<a
+											class="text-blue-600 underline dark:text-blue-400"
+											href={stepTemporalHref}
+											target="_blank"
+											rel="noreferrer"
+											title="Temporal history is not source of truth"
+										>
+											Open Temporal
+										</a>
+										<span class="text-gray-400"> — workflow activity / worker I/O</span>
+									</p>
+								{:else}
+									<p class="mt-1 text-xs text-gray-400">
+										No Temporal UI link (set TEMPORAL_UI_URL). Worker log ring is Phase 3b.
+									</p>
+								{/if}
+							</section>
+
+							{#if chain.conciergePeek}
+								<section>
+									<p class="font-medium text-gray-700 dark:text-gray-200">
+										Peek · Concierge <span class="font-normal text-gray-400">(not SoT)</span>
+									</p>
+									<p class="mt-0.5 text-xs">{chain.conciergePeek.responseKind}</p>
+									{#if chain.conciergePeek.recommendationSummary}
+										<p class="mt-0.5 text-xs">{chain.conciergePeek.recommendationSummary}</p>
+									{/if}
+								</section>
+							{/if}
+						</section>
+					{/if}
+				{/if}
 			{:else}
 				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
 					No Task to focus. Create one via the Project API, or pass

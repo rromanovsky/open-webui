@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	canOpenStepPanel,
+	committedFields,
+	defaultFocusedStepRole,
 	formatResultDetails,
 	hasSoftPeek,
 	stepStripClass,
@@ -67,9 +69,76 @@ describe('canOpenStepPanel', () => {
 });
 
 describe('stepStripClass', () => {
-	it('emphasizes running steps', () => {
+	it('gives each live-chain state a distinct chip', () => {
 		expect(stepStripClass('running')).toContain('ring-2');
+		expect(stepStripClass('succeeded')).toContain('border-emerald-400');
+		expect(stepStripClass('failed')).toContain('border-red-400');
+		expect(stepStripClass('waiting_approval')).toContain('border-amber-400');
+		expect(stepStripClass('not_started')).toContain('opacity-60');
+		expect(stepStripClass('skipped')).toContain('border-dashed');
 		expect(stepStripClass('succeeded')).not.toContain('ring-2');
+		expect(stepStripClass('skipped')).not.toContain('opacity-60');
+		expect(stepStripClass('not_started')).not.toContain('border-dashed');
+	});
+});
+
+describe('defaultFocusedStepRole', () => {
+	it('prefers running, then waiting_approval, then the latest finished step', () => {
+		expect(
+			defaultFocusedStepRole([
+				{ role: 'architect', state: 'succeeded' },
+				{ role: 'developer', state: 'running' },
+				{ role: 'qa', state: 'not_started' }
+			])
+		).toBe('developer');
+		expect(
+			defaultFocusedStepRole([
+				{ role: 'architect', state: 'succeeded' },
+				{ role: 'developer', state: 'waiting_approval' },
+				{ role: 'qa', state: 'not_started' }
+			])
+		).toBe('developer');
+		expect(
+			defaultFocusedStepRole([
+				{ role: 'architect', state: 'succeeded' },
+				{ role: 'developer', state: 'failed' },
+				{ role: 'qa', state: 'skipped' }
+			])
+		).toBe('developer');
+		expect(
+			defaultFocusedStepRole([
+				{ role: 'architect', state: 'not_started' },
+				{ role: 'team_lead', state: 'not_started' }
+			])
+		).toBe('architect');
+	});
+});
+
+describe('committedFields', () => {
+	it('surfaces recommendation and criteriaClaims and keeps inputSnapshot separate', () => {
+		const fields = committedFields({
+			details: {
+				recommendation: { recommendation: 'development' },
+				note: 'advisory'
+			},
+			criteriaClaims: [{ id: 'ac-1', status: 'pass' }],
+			inputSnapshot: { step: 'implementation' }
+		});
+		expect(fields.recommendation).toEqual({ recommendation: 'development' });
+		expect(fields.criteriaClaims).toEqual([{ id: 'ac-1', status: 'pass' }]);
+		expect(fields.inputSnapshot).toEqual({ step: 'implementation' });
+		expect(fields.otherDetails).toEqual({ note: 'advisory' });
+	});
+
+	it('treats empty claims and a missing snapshot as absent', () => {
+		const fields = committedFields({
+			details: { note: 'only' },
+			criteriaClaims: [],
+			inputSnapshot: null
+		});
+		expect(fields.criteriaClaims).toBeNull();
+		expect(fields.inputSnapshot).toBeNull();
+		expect(fields.recommendation).toBeNull();
 	});
 });
 

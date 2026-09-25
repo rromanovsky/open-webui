@@ -73,6 +73,10 @@ export function resultPath(resultId: string): string {
 	return `/api/v1/results/${resultId}`;
 }
 
+export function runPath(runId: string): string {
+	return `/api/v1/runs/${runId}`;
+}
+
 export function readStoredAecpApiBase(storage?: Storage | null): string | null {
 	try {
 		return storage?.getItem(AECP_API_BASE_STORAGE_KEY) ?? null;
