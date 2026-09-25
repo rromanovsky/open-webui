@@ -411,68 +411,7 @@
 			— not AcceptanceDecision, not Task done, not chat.
 		</p>
 
-		<section class="mt-5" aria-labelledby="layer-a-heading">
-			<h2 id="layer-a-heading" class="text-sm font-medium text-gray-800 dark:text-gray-100">
-				System health
-			</h2>
-			{#if healthLoading}
-				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading project dashboard…</p>
-			{:else if healthError}
-				<p class="mt-2 text-sm text-red-600 dark:text-red-400">
-					Could not load GET /api/v1/dashboard ({healthError}). Check AECP_API_BASE_URL / ?apiBase=
-					and CORS.
-				</p>
-			{:else if health?.emptyReason}
-				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{health.emptyReason}</p>
-			{:else if health?.selected}
-				{@const selected = health.selected}
-				<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-					{selected.project.key} · {selected.project.name} · overall {selected.overall}
-				</p>
-				<div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-					<section
-						class="rounded-xl border border-gray-100 dark:border-gray-850 bg-gray-50/70 dark:bg-gray-850/40 p-4"
-					>
-						<h3 class="text-sm font-medium text-gray-800 dark:text-gray-100">Chain hops</h3>
-						<ul class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-300">
-							{#each selected.chain as hop (hop.id)}
-								<li>
-									<span class="font-medium">{hop.label}</span>
-									<span class="text-gray-400">· {hop.status}</span>
-									<span class="text-gray-500 dark:text-gray-400"> — {hop.summary}</span>
-								</li>
-							{/each}
-						</ul>
-					</section>
-					<section
-						class="rounded-xl border border-gray-100 dark:border-gray-850 bg-gray-50/70 dark:bg-gray-850/40 p-4"
-					>
-						<h3 class="text-sm font-medium text-gray-800 dark:text-gray-100">Bots / Temporal</h3>
-						<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-							Temporal {selected.temporal.reachable ? 'reachable' : 'unreachable'}
-							{#if selected.temporal.error}
-								<span class="text-gray-500">({selected.temporal.error})</span>
-							{/if}
-						</p>
-						<p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-							Stalled runs {selected.stalledRuns.length} · recent failures {selected.recentFailures
-								.length}
-						</p>
-						<ul class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-300">
-							{#each selected.bots as bot (bot.id)}
-								<li>
-									<span class="font-medium">{bot.label}</span>
-									<span class="text-gray-400">· {bot.status}</span>
-									<span class="text-gray-500"> — stalled {bot.stalled}</span>
-								</li>
-							{/each}
-						</ul>
-					</section>
-				</div>
-			{/if}
-		</section>
-
-		<section class="mt-8" aria-labelledby="layer-b10-heading">
+		<section class="mt-5" aria-labelledby="layer-b10-heading">
 			<h2 id="layer-b10-heading" class="text-sm font-medium text-gray-800 dark:text-gray-100">
 				Task theater
 			</h2>
@@ -699,6 +638,67 @@
 					<code class="text-xs">?taskId=</code> to load
 					<code class="text-xs">GET /api/v1/tasks/:taskId/live-chain</code>.
 				</p>
+			{/if}
+		</section>
+
+		<section class="mt-8" aria-labelledby="layer-a-heading">
+			<h2 id="layer-a-heading" class="text-sm font-medium text-gray-800 dark:text-gray-100">
+				System health
+			</h2>
+			{#if healthLoading}
+				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading project dashboard…</p>
+			{:else if healthError}
+				<p class="mt-2 text-sm text-red-600 dark:text-red-400">
+					Could not load GET /api/v1/dashboard ({healthError}). Check AECP_API_BASE_URL / ?apiBase=
+					and CORS.
+				</p>
+			{:else if health?.emptyReason}
+				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{health.emptyReason}</p>
+			{:else if health?.selected}
+				{@const selected = health.selected}
+				<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+					{selected.project.key} · {selected.project.name} · overall {selected.overall}
+				</p>
+				<div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+					<section
+						class="rounded-xl border border-gray-100 dark:border-gray-850 bg-gray-50/70 dark:bg-gray-850/40 p-4"
+					>
+						<h3 class="text-sm font-medium text-gray-800 dark:text-gray-100">Chain hops</h3>
+						<ul class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+							{#each selected.chain as hop (hop.id)}
+								<li>
+									<span class="font-medium">{hop.label}</span>
+									<span class="text-gray-400">· {hop.status}</span>
+									<span class="text-gray-500 dark:text-gray-400"> — {hop.summary}</span>
+								</li>
+							{/each}
+						</ul>
+					</section>
+					<section
+						class="rounded-xl border border-gray-100 dark:border-gray-850 bg-gray-50/70 dark:bg-gray-850/40 p-4"
+					>
+						<h3 class="text-sm font-medium text-gray-800 dark:text-gray-100">Bots / Temporal</h3>
+						<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+							Temporal {selected.temporal.reachable ? 'reachable' : 'unreachable'}
+							{#if selected.temporal.error}
+								<span class="text-gray-500">({selected.temporal.error})</span>
+							{/if}
+						</p>
+						<p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+							Stalled runs {selected.stalledRuns.length} · recent failures {selected.recentFailures
+								.length}
+						</p>
+						<ul class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+							{#each selected.bots as bot (bot.id)}
+								<li>
+									<span class="font-medium">{bot.label}</span>
+									<span class="text-gray-400">· {bot.status}</span>
+									<span class="text-gray-500"> — stalled {bot.stalled}</span>
+								</li>
+							{/each}
+						</ul>
+					</section>
+				</div>
 			{/if}
 		</section>
 	</div>
