@@ -21,6 +21,7 @@
 		resolveDashboardTaskId,
 		resultPath,
 		runPath,
+		runSoftLogPath,
 		taskLiveChainPath,
 		withDashboardTaskId,
 		type DashboardTaskOption
@@ -105,6 +106,13 @@
 		| { status: 'ok'; inputSnapshot: unknown }
 		| { status: 'error' };
 
+	type SoftLogState = {
+		status: 'ok' | 'error';
+		available: boolean;
+		text: string;
+		truncated: boolean;
+	};
+
 	const STEP_LABELS: Record<string, string> = {
 		architect: 'Architect',
 		team_lead: 'Team Lead',
@@ -127,6 +135,8 @@
 	let focusForTaskId: string | null = null;
 	let detailsByRef: Record<string, DetailsState> = {};
 	let runById: Record<string, RunState> = {};
+	let softLogByRun: Record<string, SoftLogState> = {};
+	let softLogRequest: Record<string, number> = {};
 	let lastHealthKey = '';
 	let lastChainKey = '';
 	let lastTasksKey = '';
@@ -316,14 +326,20 @@
 		const step = next.steps.find((item) => item.role === focusedRole);
 		if (!step) return;
 		if (step.soft.detailsRef) void loadResultDetails(base, step.soft.detailsRef);
-		if (step.runId) void loadRunSnapshot(base, step.runId);
+		if (step.runId) {
+			void loadRunSnapshot(base, step.runId);
+			void loadSoftLog(base, step.runId);
+		}
 	}
 
 	function focusStep(step: LiveChainStep) {
 		focusedRole = step.role;
 		if (!apiBase) return;
 		if (step.soft.detailsRef) void loadResultDetails(apiBase, step.soft.detailsRef);
-		if (step.runId) void loadRunSnapshot(apiBase, step.runId);
+		if (step.runId) {
+			void loadRunSnapshot(apiBase, step.runId);
+			void loadSoftLog(apiBase, step.runId);
+		}
 	}
 
 	async function loadResultDetails(base: string, resultId: string) {
@@ -350,6 +366,33 @@
 			return;
 		}
 		runById = { ...runById, [runId]: { status: 'ok', inputSnapshot: result.data.inputSnapshot } };
+	}
+
+	async function loadSoftLog(base: string, runId: string) {
+		const request = (softLogRequest[runId] ?? 0) + 1;
+		softLogRequest = { ...softLogRequest, [runId]: request };
+		const result = await fetchAecpJson<{
+			available: boolean;
+			text: string;
+			truncated: boolean;
+		}>(joinAecpApiUrl(base, runSoftLogPath(runId)));
+		if (softLogRequest[runId] !== request) return;
+		if (!result.ok) {
+			softLogByRun = {
+				...softLogByRun,
+				[runId]: { status: 'error', available: false, text: '', truncated: false }
+			};
+			return;
+		}
+		softLogByRun = {
+			...softLogByRun,
+			[runId]: {
+				status: 'ok',
+				available: result.data.available && result.data.text.length > 0,
+				text: result.data.text,
+				truncated: result.data.truncated
+			}
+		};
 	}
 
 	onMount(() => {
@@ -502,6 +545,7 @@
 					{@const step = chain.steps.find((item) => item.role === focusedRole)}
 					{#if step}
 						{@const stepTemporalHref = temporalUiHref(chain.workflow?.uiUrl)}
+						{@const softLog = step.runId ? softLogByRun[step.runId] : undefined}
 						{@const details = step.soft.detailsRef ? detailsByRef[step.soft.detailsRef] : undefined}
 						{@const run = step.runId ? runById[step.runId] : undefined}
 						{@const fields =
@@ -598,6 +642,16 @@
 								<p class="font-medium text-gray-700 dark:text-gray-200">
 									Peek · Actions <span class="font-normal text-gray-400">(not SoT)</span>
 								</p>
+								{#if softLog?.status === 'ok' && softLog.available}
+									<pre
+										class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] text-gray-600 dark:text-gray-300"
+									>{softLog.text}</pre>
+									{#if softLog.truncated}
+										<p class="mt-1 text-xs text-gray-400">Tail capped at 256 KiB. Not SoT.</p>
+									{/if}
+								{:else}
+									<p class="mt-1 text-xs text-gray-400">No live worker tail.</p>
+								{/if}
 								{#if stepTemporalHref}
 									<p class="mt-1 text-xs">
 										<a
@@ -612,9 +666,7 @@
 										<span class="text-gray-400"> — workflow activity / worker I/O</span>
 									</p>
 								{:else}
-									<p class="mt-1 text-xs text-gray-400">
-										No Temporal UI link (set TEMPORAL_UI_URL). Worker log ring is Phase 3b.
-									</p>
+									<p class="mt-1 text-xs text-gray-400">No Temporal UI link (set TEMPORAL_UI_URL).</p>
 								{/if}
 							</section>
 

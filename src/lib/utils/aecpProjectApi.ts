@@ -77,6 +77,11 @@ export function runPath(runId: string): string {
 	return `/api/v1/runs/${runId}`;
 }
 
+/** Ephemeral Face Peek · Actions tail. Not Result / Postgres SoT. */
+export function runSoftLogPath(runId: string): string {
+	return `/api/v1/runs/${runId}/soft-log`;
+}
+
 export function readStoredAecpApiBase(storage?: Storage | null): string | null {
 	try {
 		return storage?.getItem(AECP_API_BASE_STORAGE_KEY) ?? null;
